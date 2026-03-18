@@ -44,8 +44,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 		$mensagem = 'Não foi possível ligar à base de dados.';
 	} elseif ($acaoFormulario === 'register') {
 		$novoUtilizador = trim($_POST['novo_utilizador'] ?? '');
-		$novaSenha = trim($_POST['nova_senha'] ?? '');
-		$confirmarSenha = trim($_POST['confirmar_senha'] ?? '');
+		$novaSenha = trim($_POST['nova_passwprd'] ?? '');
+		$confirmarSenha = trim($_POST['confirmar_password'] ?? '');
 		$perfilSelecionado = (int)($_POST['perfil'] ?? 0);
 		$novoUtilizadorInput = $novoUtilizador;
 
@@ -242,7 +242,7 @@ if ($baseDadosDisponivel) {
 			<label for="utilizador">Utilizador</label>
 			<input id="utilizador" name="utilizador" type="text" required value="<?php echo e($loginInput); ?>">
 
-			<label for="senha">Senha</label>
+			<label for="senha">Password</label>
 			<input id="senha" name="senha" type="password" required>
 
 			<button type="submit">Entrar</button>
