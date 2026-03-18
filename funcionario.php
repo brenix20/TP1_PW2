@@ -80,8 +80,9 @@ $perfilNormalizado = normalizePerfil($perfilAtual);
 $isGestor = $perfilNormalizado === 'gestor';
 $isFuncionario = $perfilNormalizado === 'funcionario';
 
-if (!$isFuncionario && !$isGestor) {
-  header('Location: disciplinas.php?type=error&message=' . urlencode('Acesso reservado ao perfil de funcionario.'));
+// Only allow users with the 'funcionario' profile to access this area.
+if (!$isFuncionario) {
+  header('Location: index.php?type=error&message=' . urlencode('Acesso reservado ao perfil de funcionario.'));
   exit;
 }
 
@@ -480,7 +481,7 @@ $printMode = $section === 'pautas' && (($_GET['print'] ?? '') === '1');
         <?php if (!empty($_SESSION['utilizador_perfil'])): ?>
           (<?php echo e($_SESSION['utilizador_perfil']); ?>)
         <?php endif; ?>
-        | <a class="section-link" href="disciplinas.php">Voltar ao painel</a>
+        | <a class="section-link" href="index.php">Voltar ao painel</a>
         | <a class="logout-link" href="logout.php">Terminar sessao</a>
       </p>
     </div>

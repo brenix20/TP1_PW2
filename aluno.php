@@ -14,7 +14,7 @@ $podeEditarDisciplinasCursos = $isGestor;
 
 $appArea = defined('APP_AREA') ? (string)APP_AREA : '';
 if ($appArea === 'aluno' && !$isAluno) {
-	header('Location: disciplinas.php?type=error&message=' . urlencode('Acesso restrito à área de aluno.'));
+	header('Location: index.php?type=error&message=' . urlencode('Acesso restrito à área de aluno.'));
 	exit;
 }
 
@@ -211,12 +211,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 				redirectWithMessage('matriculas', 'error', 'Não foi possível identificar a tua matrícula.');
 			}
 
+			// Accept name and birthdate on student update so rejected fichas can be corrected
+			$nome = trim($_POST['Nome'] ?? '');
+			$dataNascimento = validarDataNascimento($_POST['DataNascimento'] ?? '', $validationError);
 			$idCurso = (int)($_POST['IdCurso'] ?? 0);
 			$morada = trim($_POST['Morada'] ?? '');
 			$email = validarEmail($_POST['Email'] ?? '', $validationError);
 			$telefone = validarTelefone($_POST['Telefone'] ?? '', $validationError);
-			if ($idCurso <= 0 || $morada === '') {
-				redirectWithMessage('matriculas', 'error', 'Curso pretendido e morada são obrigatórios.');
+
+			if ($nome === '' || $dataNascimento === false || $idCurso <= 0 || $morada === '') {
+				redirectWithMessage('matriculas', 'error', 'Nome, curso, data de nascimento e morada são obrigatórios.');
+			}
+
+			$nomeLen = function_exists('mb_strlen') ? mb_strlen($nome) : strlen($nome);
+			if ($nomeLen > 25) {
+				redirectWithMessage('matriculas', 'error', 'O nome não pode ter mais de 25 caracteres.');
 			}
 
 			if ($email === false || $telefone === false) {
@@ -234,14 +243,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 				redirectWithMessage('matriculas', 'error', $uploadError);
 			}
 
+			$estadoValidacao = 'Pendente';
+
+			// Clear ObservacoesValidacao when student resubmits
 			if ($fotoBlob !== null) {
-				$estadoValidacao = 'Pendente';
-				$stmt = $conn->prepare("UPDATE matriculas SET IdCurso = ?, Morada = ?, Email = ?, Telefone = ?, EstadoValidacao = ?, Foto = ? WHERE IdAluno = ?");
-				$stmt->bind_param('isssssi', $idCurso, $morada, $email, $telefone, $estadoValidacao, $fotoBlob, $alunoIdSessao);
+				$stmt = $conn->prepare("UPDATE matriculas SET Nome = ?, DataNascimento = ?, IdCurso = ?, Morada = ?, Email = ?, Telefone = ?, EstadoValidacao = ?, ObservacoesValidacao = NULL, Foto = ? WHERE IdAluno = ?");
+				$stmt->bind_param('ssisssssi', $nome, $dataNascimento, $idCurso, $morada, $email, $telefone, $estadoValidacao, $fotoBlob, $alunoIdSessao);
 			} else {
-				$estadoValidacao = 'Pendente';
-				$stmt = $conn->prepare("UPDATE matriculas SET IdCurso = ?, Morada = ?, Email = ?, Telefone = ?, EstadoValidacao = ? WHERE IdAluno = ?");
-				$stmt->bind_param('issssi', $idCurso, $morada, $email, $telefone, $estadoValidacao, $alunoIdSessao);
+				$stmt = $conn->prepare("UPDATE matriculas SET Nome = ?, DataNascimento = ?, IdCurso = ?, Morada = ?, Email = ?, Telefone = ?, EstadoValidacao = ?, ObservacoesValidacao = NULL WHERE IdAluno = ?");
+				$stmt->bind_param('ssissssi', $nome, $dataNascimento, $idCurso, $morada, $email, $telefone, $estadoValidacao, $alunoIdSessao);
 			}
 
 			try {
@@ -610,6 +620,9 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
 					<p class="ficha-linha"><strong>Contacto:</strong> <?php echo e($fichaAluno['Telefone'] ?? ''); ?></p>
 					<p class="ficha-linha"><strong>Curso pretendido:</strong> <?php echo e($fichaAluno['Curso']); ?> (<?php echo e($fichaAluno['SiglaCurso']); ?>)</p>
 					<p class="ficha-linha"><strong>Estado de validação:</strong> <?php echo e($fichaAluno['EstadoValidacao'] ?? 'Pendente'); ?></p>
+					<?php if (!empty($fichaAluno['ObservacoesValidacao'])): ?>
+						<p class="ficha-linha"><strong>Observações:</strong> <?php echo e($fichaAluno['ObservacoesValidacao']); ?></p>
+					<?php endif; ?>
 					<p class="ficha-linha"><img class="aluno-foto" src="?table=matriculas&action=foto&id_aluno=<?php echo e($fichaAluno['IdAluno']); ?>" alt="Foto" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';"><span class="sem-foto">Sem foto</span></p>
 
 					<h3>Disciplinas do Curso</h3>
@@ -716,6 +729,12 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
 					<form method="post" enctype="multipart/form-data">
 						<input type="hidden" name="table" value="matriculas">
 						<input type="hidden" name="action" value="update_self">
+
+						<label>Nome completo</label><br>
+						<input type="text" name="Nome" maxlength="25" required value="<?php echo e($fichaAluno['Nome'] ?? ''); ?>"><br>
+
+						<label>Data de nascimento</label><br>
+						<input type="date" name="DataNascimento" required max="<?php echo e($dataMaximaNascimento); ?>" value="<?php echo e($fichaAluno['DataNascimento'] ?? ''); ?>"><br>
 
 						<label>Curso pretendido</label><br>
 						<select name="IdCurso" required>

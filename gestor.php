@@ -127,6 +127,7 @@ function getCertificadoLogoPath()
 }
 
 $matriculasSchemaReady = ensureMatriculasExtraFields($conn);
+$planoSchemaReady = ensurePlanoEstudosSchema($conn);
 
 $dataMaximaNascimento = (new DateTimeImmutable('today'))->modify('-13 years')->format('Y-m-d');
 
@@ -138,12 +139,12 @@ $podeEditarDisciplinasCursos = $isGestor;
 
 $appArea = defined('APP_AREA') ? (string)APP_AREA : '';
 if ($appArea === 'aluno' && !$isAluno) {
-  header('Location: disciplinas.php?type=error&message=' . urlencode('Acesso restrito à área de aluno.'));
+  header('Location: index.php?type=error&message=' . urlencode('Acesso restrito à área de aluno.'));
   exit;
 }
 
 if ($appArea === 'gestor' && !$isGestor) {
-  header('Location: disciplinas.php?type=error&message=' . urlencode('Acesso restrito à área de gestor.'));
+  header('Location: index.php?type=error&message=' . urlencode('Acesso restrito à área de gestor.'));
   exit;
 }
 
@@ -193,6 +194,10 @@ if (!in_array($action, $allowedActions, true)) {
 
 if (!$matriculasSchemaReady && $table === 'matriculas') {
   redirectWithMessage('disciplina', 'error', 'Não foi possível preparar a tabela de matrículas. Contacta o administrador da base de dados.');
+}
+
+if (!$planoSchemaReady && $table === 'plano_estudos') {
+  redirectWithMessage('plano_estudos', 'error', 'Não foi possível preparar o esquema do plano de estudos. Contacta o administrador da base de dados.');
 }
 
 if ($isAluno && $table === 'matriculas' && $action === 'list') {
@@ -623,33 +628,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 
   if ($postTable === 'plano_estudos') {
+    if (!$planoSchemaReady) {
+      redirectWithMessage('plano_estudos', 'error', 'Não foi possível preparar o esquema do plano de estudos. Contacta o administrador.');
+    }
+
     if ($postAction === 'create') {
       $idDisciplina = (int)($_POST['IdDisciplina'] ?? 0);
       $idCurso = (int)($_POST['IdCurso'] ?? 0);
-      $stmt = $conn->prepare("INSERT INTO plano_estudos (IdDisciplina, IdCurso) VALUES (?, ?)");
-      $stmt->bind_param('ii', $idDisciplina, $idCurso);
-      $ok = $stmt->execute();
-      $stmt->close();
-      redirectWithMessage('plano_estudos', $ok ? 'success' : 'error', $ok ? 'Ligação criada com sucesso.' : 'Erro ao criar ligação (pode já existir).');
+      $ano = (int)($_POST['Ano'] ?? 1);
+      $semestre = (int)($_POST['Semestre'] ?? 1);
+
+      if ($idDisciplina <= 0 || $idCurso <= 0 || $ano <= 0 || $semestre <= 0) {
+        redirectWithMessage('plano_estudos', 'error', 'Disciplina, curso, ano e semestre são obrigatórios.');
+      }
+
+      if ($semestre < 1 || $semestre > 2) {
+        $semestre = 1;
+      }
+
+      if ($ano < 1 || $ano > 10) {
+        $ano = max(1, min(10, $ano));
+      }
+
+      try {
+        $stmt = $conn->prepare("INSERT INTO plano_estudos (IdDisciplina, IdCurso, Ano, Semestre) VALUES (?, ?, ?, ?)");
+        $stmt->bind_param('iiii', $idDisciplina, $idCurso, $ano, $semestre);
+        $ok = $stmt->execute();
+        $stmt->close();
+        redirectWithMessage('plano_estudos', $ok ? 'success' : 'error', $ok ? 'Ligação criada com sucesso.' : 'Erro ao criar ligação (pode já existir).');
+      } catch (mysqli_sql_exception $ex) {
+        $msg = stripos($ex->getMessage(), 'Duplicate entry') !== false ? 'Já existe uma ligação para esta disciplina/curso/ano/semestre.' : 'Erro ao criar ligação.';
+        redirectWithMessage('plano_estudos', 'error', $msg);
+      }
     }
 
     if ($postAction === 'update') {
       $oldIdDisciplina = (int)($_POST['old_IdDisciplina'] ?? 0);
       $oldIdCurso = (int)($_POST['old_IdCurso'] ?? 0);
+      $oldAno = (int)($_POST['old_Ano'] ?? 0);
+      $oldSemestre = (int)($_POST['old_Semestre'] ?? 0);
+
       $newIdDisciplina = (int)($_POST['IdDisciplina'] ?? 0);
       $newIdCurso = (int)($_POST['IdCurso'] ?? 0);
-      $stmt = $conn->prepare("UPDATE plano_estudos SET IdDisciplina = ?, IdCurso = ? WHERE IdDisciplina = ? AND IdCurso = ?");
-      $stmt->bind_param('iiii', $newIdDisciplina, $newIdCurso, $oldIdDisciplina, $oldIdCurso);
-      $ok = $stmt->execute();
-      $stmt->close();
-      redirectWithMessage('plano_estudos', $ok ? 'success' : 'error', $ok ? 'Ligação atualizada com sucesso.' : 'Erro ao atualizar ligação.');
+      $newAno = (int)($_POST['Ano'] ?? 1);
+      $newSemestre = (int)($_POST['Semestre'] ?? 1);
+
+      if ($oldIdDisciplina <= 0 || $oldIdCurso <= 0 || $oldAno <= 0 || $oldSemestre <= 0) {
+        redirectWithMessage('plano_estudos', 'error', 'Identificadores antigos inválidos.');
+      }
+
+      if ($newIdDisciplina <= 0 || $newIdCurso <= 0 || $newAno <= 0 || $newSemestre <= 0) {
+        redirectWithMessage('plano_estudos', 'error', 'Disciplina, curso, ano e semestre são obrigatórios.');
+      }
+
+      try {
+        $stmt = $conn->prepare("UPDATE plano_estudos SET IdDisciplina = ?, IdCurso = ?, Ano = ?, Semestre = ? WHERE IdDisciplina = ? AND IdCurso = ? AND Ano = ? AND Semestre = ?");
+        $stmt->bind_param('iiiiiiii', $newIdDisciplina, $newIdCurso, $newAno, $newSemestre, $oldIdDisciplina, $oldIdCurso, $oldAno, $oldSemestre);
+        $ok = $stmt->execute();
+        $stmt->close();
+        redirectWithMessage('plano_estudos', $ok ? 'success' : 'error', $ok ? 'Ligação atualizada com sucesso.' : 'Erro ao atualizar ligação.');
+      } catch (mysqli_sql_exception $ex) {
+        $msg = stripos($ex->getMessage(), 'Duplicate entry') !== false ? 'Já existe uma ligação igual para esta disciplina/curso/ano/semestre.' : 'Erro ao atualizar ligação.';
+        redirectWithMessage('plano_estudos', 'error', $msg);
+      }
     }
 
     if ($postAction === 'delete') {
       $idDisciplina = (int)($_POST['IdDisciplina'] ?? 0);
       $idCurso = (int)($_POST['IdCurso'] ?? 0);
-      $stmt = $conn->prepare("DELETE FROM plano_estudos WHERE IdDisciplina = ? AND IdCurso = ?");
-      $stmt->bind_param('ii', $idDisciplina, $idCurso);
+      $ano = (int)($_POST['Ano'] ?? 1);
+      $semestre = (int)($_POST['Semestre'] ?? 1);
+      $stmt = $conn->prepare("DELETE FROM plano_estudos WHERE IdDisciplina = ? AND IdCurso = ? AND Ano = ? AND Semestre = ?");
+      $stmt->bind_param('iiii', $idDisciplina, $idCurso, $ano, $semestre);
       $ok = $stmt->execute();
       $stmt->close();
       redirectWithMessage('plano_estudos', $ok ? 'success' : 'error', $ok ? 'Ligação removida com sucesso.' : 'Erro ao remover ligação.');
@@ -704,8 +754,10 @@ if ($action === 'edit') {
   if ($table === 'plano_estudos') {
     $idDisciplina = (int)($_GET['id_disciplina'] ?? 0);
     $idCurso = (int)($_GET['id_curso'] ?? 0);
-    $stmt = $conn->prepare("SELECT * FROM plano_estudos WHERE IdDisciplina = ? AND IdCurso = ?");
-    $stmt->bind_param('ii', $idDisciplina, $idCurso);
+    $idAno = (int)($_GET['id_ano'] ?? 0);
+    $idSemestre = (int)($_GET['id_semestre'] ?? 0);
+    $stmt = $conn->prepare("SELECT * FROM plano_estudos WHERE IdDisciplina = ? AND IdCurso = ? AND Ano = ? AND Semestre = ?");
+    $stmt->bind_param('iiii', $idDisciplina, $idCurso, $idAno, $idSemestre);
     $stmt->execute();
     $result = $stmt->get_result();
     $editData = $result->fetch_assoc();
@@ -787,11 +839,11 @@ $cursosLookup = fetchLookup($conn, 'cursos', 'IdCurso', 'Curso');
 // printable view for plano_estudos (user can Print -> Save as PDF)
 if ($table === 'plano_estudos' && $action === 'print') {
   $rows = $conn->query(
-    "SELECT pe.IdDisciplina, pe.IdCurso, d.Disciplina, c.Curso
+    "SELECT pe.IdDisciplina, pe.IdCurso, pe.Ano, pe.Semestre, d.Disciplina, c.Curso
      FROM plano_estudos pe
      JOIN disciplina d ON d.IdDisciplina = pe.IdDisciplina
      JOIN cursos c ON c.IdCurso = pe.IdCurso
-     ORDER BY c.Curso, d.Disciplina"
+     ORDER BY c.Curso, pe.Ano, pe.Semestre, d.Disciplina"
   );
 
   $logoDoc = getCertificadoLogoPath();
@@ -808,9 +860,12 @@ if ($table === 'plano_estudos' && $action === 'print') {
   echo '<h1 class="document-title">Plano de Estudos</h1>';
   echo '<p class="document-subtitle">Documento emitido em ' . e($dataAtual) . '</p>';
   echo '</div>';
-  echo "<table class=\"document-table\"><thead><tr><th>Curso</th><th>Disciplina</th></tr></thead><tbody>";
+  echo "<table class=\"document-table\"><thead><tr><th>Curso</th><th>Ano</th><th>Semestre</th><th>Disciplina</th></tr></thead><tbody>";
   while ($row = $rows->fetch_assoc()) {
-    echo '<tr><td>' . htmlspecialchars($row['Curso'], ENT_QUOTES, 'UTF-8') . '</td><td>' . htmlspecialchars($row['Disciplina'], ENT_QUOTES, 'UTF-8') . '</td></tr>';
+    echo '<tr><td>' . htmlspecialchars($row['Curso'], ENT_QUOTES, 'UTF-8') . '</td>'
+      . '<td>' . htmlspecialchars((string)($row['Ano'] ?? ''), ENT_QUOTES, 'UTF-8') . '</td>'
+      . '<td>' . htmlspecialchars((string)($row['Semestre'] ?? ''), ENT_QUOTES, 'UTF-8') . '</td>'
+      . '<td>' . htmlspecialchars($row['Disciplina'], ENT_QUOTES, 'UTF-8') . '</td></tr>';
   }
   echo '</tbody></table>';
   echo '</div></body></html>';
@@ -1465,33 +1520,39 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
     <p><a class="section-link" href="?table=plano_estudos&action=print" target="_blank" rel="noopener">Exportar PDF</a></p>
     <?php
       $rows = $conn->query(
-        "SELECT pe.IdDisciplina, pe.IdCurso, d.Disciplina, c.Curso
-         FROM plano_estudos pe
-         JOIN disciplina d ON d.IdDisciplina = pe.IdDisciplina
-         JOIN cursos c ON c.IdCurso = pe.IdCurso
-         ORDER BY c.Curso, d.Disciplina"
-      );
+          "SELECT pe.IdDisciplina, pe.IdCurso, pe.Ano, pe.Semestre, d.Disciplina, c.Curso
+           FROM plano_estudos pe
+           JOIN disciplina d ON d.IdDisciplina = pe.IdDisciplina
+           JOIN cursos c ON c.IdCurso = pe.IdCurso
+           ORDER BY c.Curso, pe.Ano, pe.Semestre, d.Disciplina"
+        );
     ?>
     <table>
       <tr>
-        <th>Disciplina</th>
-        <th>Curso</th>
-        <th>Ações</th>
+          <th>Disciplina</th>
+          <th>Curso</th>
+          <th>Ano</th>
+          <th>Semestre</th>
+          <th>Ações</th>
       </tr>
       <?php while ($row = $rows->fetch_assoc()): ?>
         <tr>
-          <td><?php echo e($row['Disciplina']); ?></td>
-          <td><?php echo e($row['Curso']); ?></td>
-          <td class="actions">
-            <a href="?table=plano_estudos&action=edit&id_disciplina=<?php echo e($row['IdDisciplina']); ?>&id_curso=<?php echo e($row['IdCurso']); ?>">Editar</a>
-            <form class="inline" method="post" onsubmit="return confirm('Remover ligação do plano?');">
-              <input type="hidden" name="table" value="plano_estudos">
-              <input type="hidden" name="action" value="delete">
-              <input type="hidden" name="IdDisciplina" value="<?php echo e($row['IdDisciplina']); ?>">
-              <input type="hidden" name="IdCurso" value="<?php echo e($row['IdCurso']); ?>">
-              <button type="submit">Excluir</button>
-            </form>
-          </td>
+            <td><?php echo e($row['Disciplina']); ?></td>
+            <td><?php echo e($row['Curso']); ?></td>
+            <td><?php echo e($row['Ano'] ?? ''); ?></td>
+            <td><?php echo e($row['Semestre'] ?? ''); ?></td>
+            <td class="actions">
+              <a href="?table=plano_estudos&action=edit&id_disciplina=<?php echo e($row['IdDisciplina']); ?>&id_curso=<?php echo e($row['IdCurso']); ?>&id_ano=<?php echo e($row['Ano']); ?>&id_semestre=<?php echo e($row['Semestre']); ?>">Editar</a>
+              <form class="inline" method="post" onsubmit="return confirm('Remover ligação do plano?');">
+                <input type="hidden" name="table" value="plano_estudos">
+                <input type="hidden" name="action" value="delete">
+                <input type="hidden" name="IdDisciplina" value="<?php echo e($row['IdDisciplina']); ?>">
+                <input type="hidden" name="IdCurso" value="<?php echo e($row['IdCurso']); ?>">
+                <input type="hidden" name="Ano" value="<?php echo e($row['Ano']); ?>">
+                <input type="hidden" name="Semestre" value="<?php echo e($row['Semestre']); ?>">
+                <button type="submit">Excluir</button>
+              </form>
+            </td>
         </tr>
       <?php endwhile; ?>
     </table>
@@ -1504,6 +1565,8 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
         <?php if ($editData): ?>
           <input type="hidden" name="old_IdDisciplina" value="<?php echo e($editData['IdDisciplina']); ?>">
           <input type="hidden" name="old_IdCurso" value="<?php echo e($editData['IdCurso']); ?>">
+          <input type="hidden" name="old_Ano" value="<?php echo e($editData['Ano'] ?? '1'); ?>">
+          <input type="hidden" name="old_Semestre" value="<?php echo e($editData['Semestre'] ?? '1'); ?>">
         <?php endif; ?>
 
         <label>Disciplina</label><br>
@@ -1524,6 +1587,15 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
               <?php echo e($item['Curso']); ?>
             </option>
           <?php endforeach; ?>
+        </select><br>
+
+        <label>Ano (ex.: 1,2,...)</label><br>
+        <input type="number" name="Ano" min="1" max="10" required value="<?php echo e($editData['Ano'] ?? '1'); ?>"><br>
+
+        <label>Semestre (1 ou 2)</label><br>
+        <select name="Semestre" required>
+          <option value="1" <?php echo ((int)($editData['Semestre'] ?? 1) === 1) ? 'selected' : ''; ?>>1</option>
+          <option value="2" <?php echo ((int)($editData['Semestre'] ?? 1) === 2) ? 'selected' : ''; ?>>2</option>
         </select><br>
 
         <button type="submit"><?php echo $editData ? 'Atualizar' : 'Criar'; ?></button>

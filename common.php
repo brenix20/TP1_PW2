@@ -239,6 +239,65 @@ if (!function_exists('ensureMatriculasExtraFields')) {
   }
 }
 
+if (!function_exists('ensurePlanoEstudosSchema')) {
+  function ensurePlanoEstudosSchema(mysqli $conn)
+  {
+    $columns = [
+      'Ano' => "ALTER TABLE plano_estudos ADD COLUMN Ano TINYINT NOT NULL DEFAULT 1 AFTER IdCurso",
+      'Semestre' => "ALTER TABLE plano_estudos ADD COLUMN Semestre TINYINT NOT NULL DEFAULT 1 AFTER Ano",
+    ];
+
+    foreach ($columns as $columnName => $alterSql) {
+      $columnEscaped = $conn->real_escape_string($columnName);
+      $result = $conn->query(
+        "SELECT COLUMN_NAME
+         FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME = 'plano_estudos'
+           AND COLUMN_NAME = '{$columnEscaped}'
+         LIMIT 1"
+      );
+
+      if (!$result) {
+        return false;
+      }
+
+      $exists = $result && $result->num_rows > 0;
+      $result->close();
+
+      if (!$exists) {
+        if (!$conn->query($alterSql)) {
+          return false;
+        }
+      }
+    }
+
+    // Ensure unique index to prevent duplicate discipline/course/year/semester combinations
+    $idxRes = $conn->query(
+      "SELECT INDEX_NAME
+       FROM INFORMATION_SCHEMA.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'plano_estudos'
+         AND INDEX_NAME = 'ux_plano_estudos'
+       LIMIT 1"
+    );
+
+    if (!$idxRes) {
+      return false;
+    }
+
+    $idxExists = $idxRes && $idxRes->num_rows > 0;
+    $idxRes->close();
+    if (!$idxExists) {
+      if (!$conn->query("ALTER TABLE plano_estudos ADD UNIQUE KEY ux_plano_estudos (IdDisciplina, IdCurso, Ano, Semestre)")) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+}
+
 if (!function_exists('validarDataNascimento')) {
   function validarDataNascimento($dataNascimento, &$errorMessage)
   {

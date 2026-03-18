@@ -44,8 +44,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 		$mensagem = 'Não foi possível ligar à base de dados.';
 	} elseif ($acaoFormulario === 'register') {
 		$novoUtilizador = trim($_POST['novo_utilizador'] ?? '');
-		$novaSenha = trim($_POST['nova_passwprd'] ?? '');
-		$confirmarSenha = trim($_POST['confirmar_password'] ?? '');
+		$novaSenha = trim($_POST['nova_senha'] ?? '');
+		$confirmarSenha = trim($_POST['confirmar_senha'] ?? '');
 		$perfilSelecionado = (int)($_POST['perfil'] ?? 0);
 		$novoUtilizadorInput = $novoUtilizador;
 
@@ -144,7 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 					$_SESSION['utilizador_id'] = (int)$linha['IdUser'];
 					$_SESSION['utilizador_nome'] = $linha['login'];
 					$_SESSION['utilizador_perfil'] = $linha['nomePerfil'] ?? '';
-					header('Location: disciplinas.php');
+					header('Location: index.php');
 					exit;
 				}
 			}

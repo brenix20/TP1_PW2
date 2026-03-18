@@ -13,12 +13,12 @@ $podeEditarDisciplinasCursos = $isGestor;
 
 $appArea = defined('APP_AREA') ? (string)APP_AREA : '';
 if ($appArea === 'aluno' && !$isAluno) {
-  header('Location: disciplinas.php?type=error&message=' . urlencode('Acesso restrito à área de aluno.'));
+  header('Location: index.php?type=error&message=' . urlencode('Acesso restrito à área de aluno.'));
   exit;
 }
 
 if ($appArea === 'gestor' && !$isGestor) {
-  header('Location: disciplinas.php?type=error&message=' . urlencode('Acesso restrito à área de gestor.'));
+  header('Location: index.php?type=error&message=' . urlencode('Acesso restrito à área de gestor.'));
   exit;
 }
 
