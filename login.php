@@ -212,6 +212,8 @@ $scriptAtual = $_SERVER['SCRIPT_NAME'] ?? '/Ipca/Aulas/login.php';
 $urlAcessoMovel = $scheme . '://' . $hostParaQr . $portaParte . $scriptAtual;
 $usaHostLocal = in_array($hostOriginal, ['localhost', '127.0.0.1', '::1'], true);
 $urlQrImagem = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=' . urlencode($urlAcessoMovel);
+$stylesVersion = (string)(@filemtime(__DIR__ . '/styles.css') ?: time());
+$stylesHref = 'styles.css?v=' . rawurlencode($stylesVersion);
 
 if ($baseDadosDisponivel) {
 	$conn->close();
@@ -223,7 +225,7 @@ if ($baseDadosDisponivel) {
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>Login</title>
-	<link rel="stylesheet" href="styles.css">
+	<link rel="stylesheet" href="<?php echo e($stylesHref); ?>">
 </head>
 <body class="login-page">
 	<div class="login-card">
