@@ -88,7 +88,7 @@ body.app-page {
   font-weight: 800;
 }
 
-.app-page nav {
+.app-page .menu-nav {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
@@ -100,7 +100,7 @@ body.app-page {
   box-shadow: var(--shadow-soft);
 }
 
-.app-page nav a {
+.app-page .menu-nav .nav-link {
   text-decoration: none;
   color: #27445a;
   background: #f4f8fb;
@@ -109,14 +109,16 @@ body.app-page {
   padding: 8px 14px;
   font-size: 13px;
   font-weight: 800;
+  line-height: 1.25;
 }
 
-.app-page nav a:hover {
+.app-page .menu-nav .nav-link:hover {
   transform: translateY(-1px);
   border-color: #bfd0e0;
+  color: #27445a;
 }
 
-.app-page nav a.active {
+.app-page .menu-nav .nav-link.active {
   background: linear-gradient(135deg, var(--primary) 0%, var(--primary-strong) 100%);
   border-color: var(--primary);
   color: #fff;
@@ -173,6 +175,32 @@ body.app-page {
   box-shadow: var(--shadow-soft);
 }
 
+.app-page .table-scroll {
+  margin-top: 14px;
+  max-height: 440px;
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.app-page .table-scroll > table {
+  margin-top: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  display: table;
+}
+
+.app-page .table-scroll tr:first-child th,
+.app-page .table-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
 .app-page th,
 .app-page td {
   border-bottom: 1px solid var(--line-soft);
@@ -224,6 +252,34 @@ body.app-page {
   margin: 8px 0;
 }
 
+.app-page .ficha-resumo-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+  gap: 16px;
+  align-items: start;
+}
+
+.app-page .ficha-observacoes-box {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: linear-gradient(180deg, #f8fcff 0%, #eef7ff 100%);
+}
+
+.app-page .ficha-observacoes-box h4 {
+  margin: 0 0 8px;
+  color: #113650;
+  font-family: 'Sora', sans-serif;
+  font-size: 0.95rem;
+}
+
+.app-page .ficha-observacoes-box p {
+  margin: 0;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .app-page label {
   display: inline-block;
   margin-top: 6px;
@@ -247,10 +303,28 @@ body.app-page {
   color: var(--text);
 }
 
+.app-page textarea {
+  width: 100%;
+  max-width: 380px;
+  padding: 10px 11px;
+  margin: 6px 0 11px;
+  border: 1px solid #c7d5e3;
+  border-radius: 10px;
+  font-size: 14px;
+  background: #fff;
+  color: var(--text);
+  resize: vertical;
+}
+
 .app-page input:focus,
 .app-page select:focus,
 .login-page input:focus,
 .login-page select:focus {
+  outline: 3px solid rgba(11, 127, 121, 0.2);
+  border-color: var(--primary);
+}
+
+.app-page textarea:focus {
   outline: 3px solid rgba(11, 127, 121, 0.2);
   border-color: var(--primary);
 }
@@ -302,8 +376,166 @@ body.app-page {
   background: #e2efff;
 }
 
+.app-page .actions a.action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 92px;
+  min-height: 33px;
+  padding: 7px 11px;
+  border: 0;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-strong) 100%);
+  color: #fff;
+  font-weight: 800;
+  font-size: 12px;
+  line-height: 1;
+  box-shadow: 0 10px 18px rgba(11, 127, 121, 0.18);
+}
+
+.app-page .actions a.action-button:hover {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-strong) 100%);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.app-page .actions button.table-action-btn {
+  width: 84px;
+  min-height: 33px;
+  line-height: 1;
+}
+
 .app-page .actions form {
   margin: 0;
+}
+
+.app-page .actions a.table-action-btn,
+.app-page .actions button.table-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 84px;
+  min-height: 33px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.app-page .actions a.edit-action-btn {
+  border: 0;
+  color: #fff;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-strong) 100%);
+  box-shadow: 0 10px 18px rgba(11, 127, 121, 0.18);
+}
+
+.app-page .actions a.edit-action-btn:hover {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-strong) 100%);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.app-page .validation-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+}
+
+.app-page .validation-actions label {
+  margin-top: 0;
+}
+
+.app-page .validation-actions textarea {
+  margin: 0;
+  min-height: 70px;
+  max-width: 320px;
+}
+
+.app-page .validation-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.app-page .danger-button {
+  background: linear-gradient(135deg, #d64563 0%, #b4233c 100%);
+  box-shadow: 0 8px 16px rgba(180, 35, 60, 0.2);
+}
+
+.app-page .matriculas-scroll {
+  max-height: 500px;
+  margin: 14px auto 0;
+}
+
+.app-page .matriculas-table {
+  width: 100%;
+  min-width: 1240px;
+  table-layout: auto;
+}
+
+.app-page .matriculas-table th,
+.app-page .matriculas-table td {
+  padding: 10px 11px;
+  font-size: 12.5px;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.app-page .matriculas-table td.actions {
+  min-width: 320px;
+}
+
+.app-page .matriculas-table .col-nascimento {
+  width: 115px;
+}
+
+.app-page .matriculas-table .col-morada {
+  width: 230px;
+  word-break: break-word;
+}
+
+.app-page .matriculas-table .col-email {
+  width: 230px;
+  word-break: break-word;
+}
+
+.app-page .matriculas-table .col-curso {
+  width: 210px;
+  word-break: break-word;
+}
+
+.app-page .matriculas-table .validation-actions {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.app-page .matriculas-table .validation-actions input[type='text'] {
+  max-width: 240px;
+  margin: 0;
+  padding: 8px 9px;
+  font-size: 12px;
+}
+
+.app-page .matriculas-table .validation-buttons {
+  gap: 8px;
+}
+
+.app-page .matriculas-table .validation-buttons button,
+.app-page .matriculas-table form.inline button {
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.app-page .matriculas-table img.aluno-foto {
+  max-width: 56px;
+  max-height: 56px;
 }
 
 .app-page form.inline {
@@ -353,9 +585,37 @@ body.app-page {
   align-items: flex-end;
 }
 
+.app-page .filters-row .filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.app-page .filters-row .filter-field label {
+  margin: 0;
+}
+
+.app-page .filters-row .filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-end;
+}
+
+.app-page .filters-row .filter-actions button {
+  min-height: 42px;
+}
+
+.app-page .filters-row .filter-actions .cancel-link {
+  margin-left: 0;
+}
+
 .app-page .filters-row input,
 .app-page .filters-row select {
+  width: 100%;
   max-width: 280px;
+  margin: 0;
 }
 
 .app-page .filters-row .section-link {
@@ -646,11 +906,19 @@ body.document-page {
   .document-page .document-grid {
     grid-template-columns: 1fr;
   }
+
+  .app-page .ficha-resumo-layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 760px) {
   .app-page .app-shell {
     padding: 18px 12px 30px;
+  }
+
+  .app-page .table-scroll {
+    max-height: 360px;
   }
 
   .app-page table {
@@ -665,6 +933,15 @@ body.document-page {
     max-width: 100%;
   }
 
+  .app-page .filters-row .filter-field,
+  .app-page .filters-row .filter-actions {
+    min-width: 100%;
+  }
+
+  .app-page .filters-row .filter-actions button {
+    min-height: 38px;
+  }
+
   .app-page .actions {
     gap: 6px;
   }
@@ -672,6 +949,18 @@ body.document-page {
   .app-page .actions a {
     font-size: 11px;
     padding: 5px 8px;
+  }
+
+  .app-page .actions a.action-button,
+  .app-page .actions button.table-action-btn {
+    width: 84px;
+    min-height: 34px;
+    font-size: 11px;
+    padding: 5px 8px;
+  }
+
+  .app-page .actions a.table-action-btn {
+    min-height: 34px;
   }
 
   body.document-page {

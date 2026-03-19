@@ -11,17 +11,6 @@ $isAluno = $perfilAtual === 'aluno';
 $isFuncionario = in_array($perfilAtual, ['funcionario', 'funcionário'], true);
 $podeEditarDisciplinasCursos = $isGestor;
 
-$appArea = defined('APP_AREA') ? (string)APP_AREA : '';
-if ($appArea === 'aluno' && !$isAluno) {
-  header('Location: index.php?type=error&message=' . urlencode('Acesso restrito à área de aluno.'));
-  exit;
-}
-
-if ($appArea === 'gestor' && !$isGestor) {
-  header('Location: index.php?type=error&message=' . urlencode('Acesso restrito à área de gestor.'));
-  exit;
-}
-
 $alunoIdUtilizador = $isAluno ? (int)($_SESSION['utilizador_id'] ?? 0) : 0;
 $alunoIdSessao = 0;
 if ($isAluno) {
@@ -770,6 +759,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CRUD - IPCAVNF</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="<?php echo e($stylesHref); ?>">
 </head>
 <body class="app-page">
@@ -796,18 +786,15 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
     </p>
   </div>
 
-  <nav>
-    <a class="<?php echo $table === 'disciplina' ? 'active' : ''; ?>" href="?table=disciplina">Disciplinas</a>
-    <a class="<?php echo $table === 'cursos' ? 'active' : ''; ?>" href="?table=cursos">Cursos</a>
+  <nav class="menu-nav nav nav-pills flex-wrap align-items-center gap-2">
+    <a class="nav-link <?php echo $table === 'disciplina' ? 'active' : ''; ?>" href="?table=disciplina">Disciplinas</a>
+    <a class="nav-link <?php echo $table === 'cursos' ? 'active' : ''; ?>" href="?table=cursos">Cursos</a>
     <?php if ($isGestor): ?>
-      <a class="<?php echo $table === 'matriculas' ? 'active' : ''; ?>" href="?table=matriculas">Matrículas</a>
-      <a class="<?php echo $table === 'plano_estudos' ? 'active' : ''; ?>" href="?table=plano_estudos">Planos de Estudo</a>
+      <a class="nav-link <?php echo $table === 'matriculas' ? 'active' : ''; ?>" href="?table=matriculas">Matrículas</a>
+      <a class="nav-link <?php echo $table === 'plano_estudos' ? 'active' : ''; ?>" href="?table=plano_estudos">Planos de Estudo</a>
     <?php elseif ($isAluno): ?>
-      <a class="<?php echo ($table === 'matriculas' && in_array($action, ['ficha', 'ficha_print', 'ficha_edit'], true)) ? 'active' : ''; ?>" href="?table=matriculas&action=ficha">Minha Ficha</a>
-      <a class="<?php echo ($table === 'matriculas' && $action === 'minhas_disciplinas') ? 'active' : ''; ?>" href="?table=matriculas&action=minhas_disciplinas">Minhas Disciplinas</a>
-    <?php endif; ?>
-    <?php if ($isGestor || $isFuncionario): ?>
-      <a href="funcionario.php">Área de Funcionário</a>
+      <a class="nav-link <?php echo ($table === 'matriculas' && in_array($action, ['ficha', 'ficha_print', 'ficha_edit'], true)) ? 'active' : ''; ?>" href="?table=matriculas&action=ficha">Minha Ficha</a>
+      <a class="nav-link <?php echo ($table === 'matriculas' && $action === 'minhas_disciplinas') ? 'active' : ''; ?>" href="?table=matriculas&action=minhas_disciplinas">Minhas Disciplinas</a>
     <?php endif; ?>
   </nav>
 
@@ -818,32 +805,34 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
   <?php if ($table === 'disciplina'): ?>
     <h2>Disciplinas</h2>
     <?php $rows = $conn->query("SELECT * FROM disciplina ORDER BY IdDisciplina DESC"); ?>
-    <table>
-      <tr>
-        <th>Disciplina</th>
-        <th>Sigla</th>
-        <?php if ($podeEditarDisciplinasCursos): ?>
-          <th>Ações</th>
-        <?php endif; ?>
-      </tr>
-      <?php while ($row = $rows->fetch_assoc()): ?>
+    <div class="table-scroll" aria-label="Lista de disciplinas com scroll">
+      <table>
         <tr>
-          <td><?php echo e($row['Disciplina']); ?></td>
-          <td><?php echo e($row['Sigla']); ?></td>
+          <th>Disciplina</th>
+          <th>Sigla</th>
           <?php if ($podeEditarDisciplinasCursos): ?>
-            <td class="actions">
-              <a href="?table=disciplina&action=edit&id=<?php echo e($row['IdDisciplina']); ?>">Editar</a>
-              <form class="inline" method="post" onsubmit="return confirm('Remover disciplina?');">
-                <input type="hidden" name="table" value="disciplina">
-                <input type="hidden" name="action" value="delete">
-                <input type="hidden" name="IdDisciplina" value="<?php echo e($row['IdDisciplina']); ?>">
-                <button type="submit">Excluir</button>
-              </form>
-            </td>
+            <th>Ações</th>
           <?php endif; ?>
         </tr>
-      <?php endwhile; ?>
-    </table>
+        <?php while ($row = $rows->fetch_assoc()): ?>
+          <tr>
+            <td><?php echo e($row['Disciplina']); ?></td>
+            <td><?php echo e($row['Sigla']); ?></td>
+            <?php if ($podeEditarDisciplinasCursos): ?>
+              <td class="actions">
+                <a href="?table=disciplina&action=edit&id=<?php echo e($row['IdDisciplina']); ?>">Editar</a>
+                <form class="inline" method="post" onsubmit="return confirm('Remover disciplina?');">
+                  <input type="hidden" name="table" value="disciplina">
+                  <input type="hidden" name="action" value="delete">
+                  <input type="hidden" name="IdDisciplina" value="<?php echo e($row['IdDisciplina']); ?>">
+                  <button type="submit">Excluir</button>
+                </form>
+              </td>
+            <?php endif; ?>
+          </tr>
+        <?php endwhile; ?>
+      </table>
+    </div>
 
     <?php if ($podeEditarDisciplinasCursos): ?>
       <div class="form-box">
@@ -873,32 +862,34 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
   <?php if ($table === 'cursos'): ?>
     <h2>Cursos</h2>
     <?php $rows = $conn->query("SELECT * FROM cursos ORDER BY IdCurso DESC"); ?>
-    <table>
-      <tr>
-        <th>Curso</th>
-        <th>Sigla</th>
-        <?php if ($podeEditarDisciplinasCursos): ?>
-          <th>Ações</th>
-        <?php endif; ?>
-      </tr>
-      <?php while ($row = $rows->fetch_assoc()): ?>
+    <div class="table-scroll" aria-label="Lista de cursos com scroll">
+      <table>
         <tr>
-          <td><?php echo e($row['Curso']); ?></td>
-          <td><?php echo e($row['Sigla']); ?></td>
+          <th>Curso</th>
+          <th>Sigla</th>
           <?php if ($podeEditarDisciplinasCursos): ?>
-            <td class="actions">
-              <a href="?table=cursos&action=edit&id=<?php echo e($row['IdCurso']); ?>">Editar</a>
-              <form class="inline" method="post" onsubmit="return confirm('Remover curso?');">
-                <input type="hidden" name="table" value="cursos">
-                <input type="hidden" name="action" value="delete">
-                <input type="hidden" name="IdCurso" value="<?php echo e($row['IdCurso']); ?>">
-                <button type="submit">Excluir</button>
-              </form>
-            </td>
+            <th>Ações</th>
           <?php endif; ?>
         </tr>
-      <?php endwhile; ?>
-    </table>
+        <?php while ($row = $rows->fetch_assoc()): ?>
+          <tr>
+            <td><?php echo e($row['Curso']); ?></td>
+            <td><?php echo e($row['Sigla']); ?></td>
+            <?php if ($podeEditarDisciplinasCursos): ?>
+              <td class="actions">
+                <a href="?table=cursos&action=edit&id=<?php echo e($row['IdCurso']); ?>">Editar</a>
+                <form class="inline" method="post" onsubmit="return confirm('Remover curso?');">
+                  <input type="hidden" name="table" value="cursos">
+                  <input type="hidden" name="action" value="delete">
+                  <input type="hidden" name="IdCurso" value="<?php echo e($row['IdCurso']); ?>">
+                  <button type="submit">Excluir</button>
+                </form>
+              </td>
+            <?php endif; ?>
+          </tr>
+        <?php endwhile; ?>
+      </table>
+    </div>
 
     <?php if ($podeEditarDisciplinasCursos): ?>
       <div class="form-box">

@@ -16,6 +16,8 @@ if ($perfilAtual === 'aluno') {
   $target = 'aluno.php';
 } elseif ($perfilAtual === 'gestor') {
   $target = 'gestor.php';
+} elseif ($perfilAtual === 'funcionario' || $perfilAtual === 'funcionário') {
+  $target = 'funcionario.php';
 }
 
 if ($target !== '') {

@@ -2,130 +2,6 @@
 define('APP_AREA', 'gestor');
 require_once __DIR__ . '/common.php';
 
-function normalizarEstadoValidacao($estado)
-{
-  $estado = strtolower(trim((string)$estado));
-  if ($estado === 'pendente') {
-    return 'Pendente';
-  }
-
-  if ($estado === 'aprovada' || $estado === 'aprovado') {
-    return 'Aprovada';
-  }
-
-  if ($estado === 'rejeitada' || $estado === 'rejeitado') {
-    return 'Rejeitada';
-  }
-
-  return false;
-}
-
-function mensagemErroMatricula(mysqli_sql_exception $exception)
-{
-  $erro = $exception->getMessage();
-  if (stripos($erro, 'Duplicate entry') !== false && stripos($erro, 'IdAluno') !== false) {
-    return 'Já existe uma matrícula para esse ID de aluno.';
-  }
-
-  if (stripos($erro, "Data too long for column 'Foto'") !== false) {
-    return 'A imagem enviada é demasiado grande. Tenta uma foto com tamanho menor.';
-  }
-
-  return 'Não foi possível guardar a matrícula. Tenta novamente.';
-}
-
-function getCertificadoLogoPath()
-{
-  $dirs = [
-    ['abs' => __DIR__, 'rel' => ''],
-    ['abs' => dirname(__DIR__), 'rel' => '../'],
-  ];
-  $extPermitidas = ['png', 'jpg', 'jpeg', 'webp', 'svg'];
-  $preferidos = [];
-  $outros = [];
-
-  foreach ($dirs as $dirInfo) {
-    if (!is_dir($dirInfo['abs'])) {
-      continue;
-    }
-
-    $ficheiros = scandir($dirInfo['abs']);
-    if (!is_array($ficheiros)) {
-      continue;
-    }
-
-    foreach ($ficheiros as $ficheiro) {
-      if ($ficheiro === '.' || $ficheiro === '..') {
-        continue;
-      }
-
-      $absPath = $dirInfo['abs'] . '/' . $ficheiro;
-      if (!is_file($absPath)) {
-        continue;
-      }
-
-      $ext = strtolower((string)pathinfo($ficheiro, PATHINFO_EXTENSION));
-      if (!in_array($ext, $extPermitidas, true)) {
-        continue;
-      }
-
-      $urlPath = $dirInfo['rel'] . rawurlencode($ficheiro);
-      $item = [
-        'abs' => $absPath,
-        'url' => $urlPath,
-        'mtime' => (int)@filemtime($absPath),
-        'name' => $ficheiro,
-      ];
-
-      if (preg_match('/logo|ipca|instituto|escola|certificado/i', $ficheiro)) {
-        $preferidos[] = $item;
-      } else {
-        $outros[] = $item;
-      }
-    }
-  }
-
-  $ordenar = function (&$itens) {
-    usort($itens, function ($a, $b) {
-      return ($b['mtime'] ?? 0) <=> ($a['mtime'] ?? 0);
-    });
-  };
-
-  $ordenar($preferidos);
-  $ordenar($outros);
-
-  $escolhido = null;
-
-  if (!empty($preferidos)) {
-    $escolhido = $preferidos[0];
-  } elseif (!empty($outros)) {
-    $escolhido = $outros[0];
-  }
-
-  if (is_array($escolhido) && !empty($escolhido['abs'])) {
-    $conteudo = @file_get_contents((string)$escolhido['abs']);
-    if ($conteudo !== false) {
-      $mime = 'image/png';
-      if (function_exists('finfo_open')) {
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        if ($finfo) {
-          $detected = finfo_file($finfo, (string)$escolhido['abs']);
-          finfo_close($finfo);
-          if (is_string($detected) && str_starts_with($detected, 'image/')) {
-            $mime = $detected;
-          }
-        }
-      }
-
-      return 'data:' . $mime . ';base64,' . base64_encode($conteudo);
-    }
-
-    return (string)($escolhido['url'] ?? '');
-  }
-
-  return '';
-}
-
 $matriculasSchemaReady = ensureMatriculasExtraFields($conn);
 $planoSchemaReady = ensurePlanoEstudosSchema($conn);
 
@@ -133,35 +9,12 @@ $dataMaximaNascimento = (new DateTimeImmutable('today'))->modify('-13 years')->f
 
 $perfilAtual = strtolower(trim((string)($_SESSION['utilizador_perfil'] ?? '')));
 $isGestor = $perfilAtual === 'gestor';
-$isAluno = $perfilAtual === 'aluno';
-$isFuncionario = in_array($perfilAtual, ['funcionario', 'funcionário'], true);
 $podeEditarDisciplinasCursos = $isGestor;
 
 $appArea = defined('APP_AREA') ? (string)APP_AREA : '';
-if ($appArea === 'aluno' && !$isAluno) {
-  header('Location: index.php?type=error&message=' . urlencode('Acesso restrito à área de aluno.'));
-  exit;
-}
-
 if ($appArea === 'gestor' && !$isGestor) {
   header('Location: index.php?type=error&message=' . urlencode('Acesso restrito à área de gestor.'));
   exit;
-}
-
-$alunoIdUtilizador = $isAluno ? (int)($_SESSION['utilizador_id'] ?? 0) : 0;
-$alunoIdSessao = 0;
-if ($isAluno) {
-  if ($alunoIdUtilizador > 0) {
-    $stmtAlunoSessao = $conn->prepare("SELECT IdAluno FROM matriculas WHERE IdAluno = ? LIMIT 1");
-    $stmtAlunoSessao->bind_param('i', $alunoIdUtilizador);
-    $stmtAlunoSessao->execute();
-    $resultAlunoSessao = $stmtAlunoSessao->get_result();
-    $alunoSessao = $resultAlunoSessao ? $resultAlunoSessao->fetch_assoc() : null;
-    $stmtAlunoSessao->close();
-    if ($alunoSessao) {
-      $alunoIdSessao = $alunoIdUtilizador;
-    }
-  }
 }
 
 $allowedTables = [
@@ -174,19 +27,13 @@ if ($isGestor) {
   $allowedTables['plano_estudos'] = true;
 }
 
-if ($isAluno) {
-  $allowedTables['matriculas'] = true;
-}
-
 $table = $_GET['table'] ?? 'disciplina';
 if (!isset($allowedTables[$table])) {
   $table = 'disciplina';
 }
 
 $action = $_GET['action'] ?? 'list';
-$allowedActions = $isGestor
-  ? ['list', 'edit', 'foto', 'ver_disciplinas', 'ficha', 'ficha_print', 'certificado_print', 'print']
-  : ($isAluno ? ['list', 'ficha', 'ficha_print', 'certificado_print', 'foto', 'ficha_edit', 'minhas_disciplinas'] : ['list']);
+$allowedActions = ['list', 'edit', 'foto', 'ver_disciplinas', 'ficha', 'ficha_print', 'certificado_print', 'print'];
 
 if (!in_array($action, $allowedActions, true)) {
   $action = 'list';
@@ -200,23 +47,12 @@ if (!$planoSchemaReady && $table === 'plano_estudos') {
   redirectWithMessage('plano_estudos', 'error', 'Não foi possível preparar o esquema do plano de estudos. Contacta o administrador da base de dados.');
 }
 
-if ($isAluno && $table === 'matriculas' && $action === 'list') {
-  $action = 'ficha';
-}
-
 if ($action === 'edit' && !$podeEditarDisciplinasCursos) {
   redirectWithMessage($table, 'error', 'Apenas gestores podem editar disciplinas e cursos.');
 }
 
 if ($table === 'matriculas' && $action === 'foto') {
   $idAlunoFoto = (int)($_GET['id_aluno'] ?? 0);
-  if ($isAluno) {
-    if ($alunoIdSessao <= 0) {
-      http_response_code(404);
-      exit;
-    }
-    $idAlunoFoto = $alunoIdSessao;
-  }
 
   $stmtFoto = $conn->prepare("SELECT Foto FROM matriculas WHERE IdAluno = ?");
   $stmtFoto->bind_param('i', $idAlunoFoto);
@@ -264,16 +100,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
   } elseif ($postTable === 'matriculas') {
     if ($isGestor) {
-      // Gestores apenas podem validar/rejeitar fichas (set_validation)
-      if ($postAction !== 'set_validation') {
-        redirectWithMessage('matriculas', 'error', 'Gestores apenas podem validar/rejeitar fichas de aluno.');
-      }
-    } elseif ($isAluno) {
-      // Alunos só podem criar/atualizar a sua própria ficha
-      $alunoPodeAtualizarFicha = $postAction === 'update_self';
-      $alunoPodeCriarFicha = $postAction === 'create_self';
-      if (!$alunoPodeAtualizarFicha && !$alunoPodeCriarFicha) {
-        redirectWithMessage('matriculas', 'error', 'Ação inválida para aluno.');
+      // Gestores podem validar/rejeitar fichas (set_validation) e remover (delete)
+      if (!in_array($postAction, ['set_validation', 'delete'], true)) {
+        redirectWithMessage('matriculas', 'error', 'Gestores apenas podem validar/rejeitar ou remover fichas de aluno.');
       }
     } else {
       redirectWithMessage('matriculas', 'error', 'Acesso inválido.');
@@ -282,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirectWithMessage($postTable, 'error', 'Tabela inválida.');
   }
 
-  if (!in_array($postAction, ['create', 'update', 'delete', 'update_self', 'create_self', 'set_validation'], true)) {
+  if (!in_array($postAction, ['create', 'update', 'delete', 'set_validation'], true)) {
     redirectWithMessage($postTable, 'error', 'Ação inválida.');
   }
 
@@ -355,123 +184,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       redirectWithMessage('disciplina', 'error', 'Não foi possível preparar a tabela de matrículas.');
     }
 
-    if ($postAction === 'create_self') {
-      if (!$isAluno || $alunoIdUtilizador <= 0) {
-        redirectWithMessage('matriculas', 'error', 'Não foi possível identificar o teu utilizador.');
-      }
-
-      $idAluno = $alunoIdUtilizador;
-      $nome = trim($_POST['Nome'] ?? '');
-      $idCurso = (int)($_POST['IdCurso'] ?? 0);
-      $dataNascimento = validarDataNascimento($_POST['DataNascimento'] ?? '', $validationError);
-      $morada = trim($_POST['Morada'] ?? '');
-      $email = validarEmail($_POST['Email'] ?? '', $validationError);
-      $telefone = validarTelefone($_POST['Telefone'] ?? '', $validationError);
-
-      if ($nome === '' || $idCurso <= 0 || $morada === '') {
-        redirectWithMessage('matriculas', 'error', 'Nome, curso, data de nascimento, morada, email e contacto telefónico são obrigatórios.');
-      }
-
-      $nomeLen = function_exists('mb_strlen') ? mb_strlen($nome) : strlen($nome);
-      if ($nomeLen > 25) {
-        redirectWithMessage('matriculas', 'error', 'O nome não pode ter mais de 25 caracteres.');
-      }
-
-      if ($dataNascimento === false || $email === false || $telefone === false) {
-        redirectWithMessage('matriculas', 'error', $validationError);
-      }
-
-      $moradaLen = function_exists('mb_strlen') ? mb_strlen($morada) : strlen($morada);
-      if ($moradaLen > 255) {
-        redirectWithMessage('matriculas', 'error', 'A morada não pode ter mais de 255 caracteres.');
-      }
-
-      $stmtIdAlunoExiste = $conn->prepare('SELECT IdAluno FROM matriculas WHERE IdAluno = ? LIMIT 1');
-      $stmtIdAlunoExiste->bind_param('i', $idAluno);
-      $stmtIdAlunoExiste->execute();
-      $resultIdAlunoExiste = $stmtIdAlunoExiste->get_result();
-      $idAlunoJaExiste = $resultIdAlunoExiste && $resultIdAlunoExiste->fetch_assoc();
-      $stmtIdAlunoExiste->close();
-      if ($idAlunoJaExiste) {
-        redirectWithMessage('matriculas', 'error', 'Já existe uma ficha submetida para o teu utilizador.');
-      }
-
-      $uploadError = '';
-      $fotoBlob = getUploadedImageBlob('Foto', $uploadError);
-      if ($fotoBlob === false) {
-        redirectWithMessage('matriculas', 'error', $uploadError);
-      }
-
-      if ($fotoBlob !== null) {
-        $estadoValidacao = 'Pendente';
-        $stmt = $conn->prepare("INSERT INTO matriculas (IdAluno, Nome, IdCurso, DataNascimento, Morada, Email, Telefone, EstadoValidacao, Foto) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param('isissssss', $idAluno, $nome, $idCurso, $dataNascimento, $morada, $email, $telefone, $estadoValidacao, $fotoBlob);
-      } else {
-        $estadoValidacao = 'Pendente';
-        $stmt = $conn->prepare("INSERT INTO matriculas (IdAluno, Nome, IdCurso, DataNascimento, Morada, Email, Telefone, EstadoValidacao) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param('isisssss', $idAluno, $nome, $idCurso, $dataNascimento, $morada, $email, $telefone, $estadoValidacao);
-      }
-
-      try {
-        $ok = $stmt->execute();
-      } catch (mysqli_sql_exception $exception) {
-        $stmt->close();
-        redirectWithMessage('matriculas', 'error', mensagemErroMatricula($exception));
-      }
-
-      $stmt->close();
-      redirectWithMessage('matriculas', $ok ? 'success' : 'error', $ok ? 'Ficha submetida com sucesso.' : 'Erro ao submeter ficha.');
-    }
-
-    if ($postAction === 'update_self') {
-      if (!$isAluno || $alunoIdSessao <= 0) {
-        redirectWithMessage('matriculas', 'error', 'Não foi possível identificar a tua matrícula.');
-      }
-
-      $idCurso = (int)($_POST['IdCurso'] ?? 0);
-      $morada = trim($_POST['Morada'] ?? '');
-      $email = validarEmail($_POST['Email'] ?? '', $validationError);
-      $telefone = validarTelefone($_POST['Telefone'] ?? '', $validationError);
-      if ($idCurso <= 0 || $morada === '') {
-        redirectWithMessage('matriculas', 'error', 'Curso pretendido e morada são obrigatórios.');
-      }
-
-      if ($email === false || $telefone === false) {
-        redirectWithMessage('matriculas', 'error', $validationError);
-      }
-
-      $moradaLen = function_exists('mb_strlen') ? mb_strlen($morada) : strlen($morada);
-      if ($moradaLen > 255) {
-        redirectWithMessage('matriculas', 'error', 'A morada não pode ter mais de 255 caracteres.');
-      }
-
-      $uploadError = '';
-      $fotoBlob = getUploadedImageBlob('Foto', $uploadError);
-      if ($fotoBlob === false) {
-        redirectWithMessage('matriculas', 'error', $uploadError);
-      }
-
-      if ($fotoBlob !== null) {
-        $estadoValidacao = 'Pendente';
-        $stmt = $conn->prepare("UPDATE matriculas SET IdCurso = ?, Morada = ?, Email = ?, Telefone = ?, EstadoValidacao = ?, ObservacoesValidacao = NULL, Foto = ? WHERE IdAluno = ?");
-        $stmt->bind_param('isssssi', $idCurso, $morada, $email, $telefone, $estadoValidacao, $fotoBlob, $alunoIdSessao);
-      } else {
-        $estadoValidacao = 'Pendente';
-        $stmt = $conn->prepare("UPDATE matriculas SET IdCurso = ?, Morada = ?, Email = ?, Telefone = ?, EstadoValidacao = ?, ObservacoesValidacao = NULL WHERE IdAluno = ?");
-        $stmt->bind_param('issssi', $idCurso, $morada, $email, $telefone, $estadoValidacao, $alunoIdSessao);
-      }
-
-      try {
-        $ok = $stmt->execute();
-      } catch (mysqli_sql_exception $exception) {
-        $stmt->close();
-        redirectWithMessage('matriculas', 'error', mensagemErroMatricula($exception));
-      }
-
-      $stmt->close();
-      redirectWithMessage('matriculas', $ok ? 'success' : 'error', $ok ? 'Ficha atualizada com sucesso.' : 'Erro ao atualizar ficha.');
-    }
-
     if ($postAction === 'create') {
       $idAluno = (int)($_POST['IdAluno'] ?? 0);
       $nome = trim($_POST['Nome'] ?? '');
@@ -483,7 +195,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $estadoValidacao = normalizarEstadoValidacao($_POST['EstadoValidacao'] ?? 'Pendente');
 
       if ($idAluno <= 0 || $nome === '' || $idCurso <= 0 || $morada === '') {
-        redirectWithMessage('matriculas', 'error', 'ID de aluno, nome, curso, data de nascimento, morada, email e contacto telefónico são obrigatórios.');
+        redirectWithMessage('matriculas', 'error', 'ID de aluno, nome, curso, data de nascimento, morada, email, contacto telefónico e foto são obrigatórios.');
       }
 
       $nomeLen = function_exists('mb_strlen') ? mb_strlen($nome) : strlen($nome);
@@ -520,13 +232,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirectWithMessage('matriculas', 'error', $uploadError);
       }
 
-      if ($fotoBlob !== null) {
-        $stmt = $conn->prepare("INSERT INTO matriculas (IdAluno, Nome, IdCurso, DataNascimento, Morada, Email, Telefone, EstadoValidacao, Foto) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param('isissssss', $idAluno, $nome, $idCurso, $dataNascimento, $morada, $email, $telefone, $estadoValidacao, $fotoBlob);
-      } else {
-        $stmt = $conn->prepare("INSERT INTO matriculas (IdAluno, Nome, IdCurso, DataNascimento, Morada, Email, Telefone, EstadoValidacao) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param('isisssss', $idAluno, $nome, $idCurso, $dataNascimento, $morada, $email, $telefone, $estadoValidacao);
+      // Foto é obrigatória ao criar a matrícula via gestor
+      if ($fotoBlob === null) {
+        redirectWithMessage('matriculas', 'error', 'A foto é obrigatória.');
       }
+
+      $stmt = $conn->prepare("INSERT INTO matriculas (IdAluno, Nome, IdCurso, DataNascimento, Morada, Email, Telefone, EstadoValidacao, Foto) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+      $stmt->bind_param('isissssss', $idAluno, $nome, $idCurso, $dataNascimento, $morada, $email, $telefone, $estadoValidacao, $fotoBlob);
       try {
         $ok = $stmt->execute();
       } catch (mysqli_sql_exception $exception) {
@@ -613,12 +325,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirectWithMessage('matriculas', 'error', 'Estado de validação inválido.');
       }
 
+      $utilizadorAtual = (string)($_SESSION['utilizador_nome'] ?? '');
+
       if ($observacoes === '') {
-        $stmt = $conn->prepare("UPDATE matriculas SET EstadoValidacao = ?, ObservacoesValidacao = NULL WHERE IdAluno = ?");
-        $stmt->bind_param('si', $estadoValidacao, $idAluno);
+        $stmt = $conn->prepare("UPDATE matriculas SET EstadoValidacao = ?, ObservacoesValidacao = NULL, ValidadoPor = ?, DataValidacao = NOW() WHERE IdAluno = ?");
+        $stmt->bind_param('ssi', $estadoValidacao, $utilizadorAtual, $idAluno);
       } else {
-        $stmt = $conn->prepare("UPDATE matriculas SET EstadoValidacao = ?, ObservacoesValidacao = ? WHERE IdAluno = ?");
-        $stmt->bind_param('ssi', $estadoValidacao, $observacoes, $idAluno);
+        $stmt = $conn->prepare("UPDATE matriculas SET EstadoValidacao = ?, ObservacoesValidacao = ?, ValidadoPor = ?, DataValidacao = NOW() WHERE IdAluno = ?");
+        $stmt->bind_param('sssi', $estadoValidacao, $observacoes, $utilizadorAtual, $idAluno);
       }
       $ok = $stmt->execute();
       $stmt->close();
@@ -796,15 +510,11 @@ if ($table === 'matriculas' && $action === 'ver_disciplinas') {
   }
 }
 
-if ($table === 'matriculas' && in_array($action, ['ficha', 'ficha_print', 'certificado_print', 'ficha_edit', 'minhas_disciplinas'], true)) {
-  if ($isAluno) {
-    $alunoIdSelecionado = $alunoIdSessao;
-  } else {
-    $alunoIdSelecionado = (int)($_GET['id_aluno'] ?? 0);
-  }
+if ($table === 'matriculas' && in_array($action, ['ficha', 'ficha_print', 'certificado_print'], true)) {
+  $alunoIdSelecionado = (int)($_GET['id_aluno'] ?? 0);
 
-  $stmtFicha = $conn->prepare(
-      "SELECT m.IdAluno, m.Nome, m.IdCurso, m.DataNascimento, m.Morada, m.Email, m.Telefone, m.EstadoValidacao, c.Curso, c.Sigla AS SiglaCurso
+    $stmtFicha = $conn->prepare(
+      "SELECT m.IdAluno, m.Nome, m.IdCurso, m.DataNascimento, m.Morada, m.Email, m.Telefone, m.EstadoValidacao, m.ObservacoesValidacao, c.Curso, c.Sigla AS SiglaCurso
      FROM matriculas m
      JOIN cursos c ON c.IdCurso = m.IdCurso
      WHERE m.IdAluno = ?"
@@ -975,6 +685,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CRUD - IPCAVNF</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="<?php echo e($stylesHref); ?>">
 </head>
 <body class="app-page">
@@ -983,13 +694,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
     <div>
       <h1>Gestão Académica</h1>
       <p class="subtitle">
-        <?php echo $isGestor
-          ? 'Gestão de Disciplinas, Cursos, Matrículas e Plano de Estudos'
-          : ($isAluno
-            ? 'Consulta de Disciplinas, Cursos e da tua Ficha de Aluno'
-            : ($isFuncionario
-              ? 'Gestão de pedidos de matrícula, pautas e notas'
-              : 'Consulta de Disciplinas e Cursos disponíveis')); ?>
+        Gestão de Disciplinas, Cursos, Ficha de Aluno e Plano de Estudos
       </p>
     </div>
     <p class="user-meta">
@@ -1001,19 +706,11 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
     </p>
   </div>
 
-  <nav>
-    <a class="<?php echo $table === 'disciplina' ? 'active' : ''; ?>" href="?table=disciplina">Disciplinas</a>
-    <a class="<?php echo $table === 'cursos' ? 'active' : ''; ?>" href="?table=cursos">Cursos</a>
-    <?php if ($isGestor): ?>
-      <a class="<?php echo $table === 'matriculas' ? 'active' : ''; ?>" href="?table=matriculas">Matrículas</a>
-      <a class="<?php echo $table === 'plano_estudos' ? 'active' : ''; ?>" href="?table=plano_estudos">Planos de Estudo</a>
-    <?php elseif ($isAluno): ?>
-      <a class="<?php echo ($table === 'matriculas' && in_array($action, ['ficha', 'ficha_print', 'ficha_edit'], true)) ? 'active' : ''; ?>" href="?table=matriculas&action=ficha">Minha Ficha</a>
-      <a class="<?php echo ($table === 'matriculas' && $action === 'minhas_disciplinas') ? 'active' : ''; ?>" href="?table=matriculas&action=minhas_disciplinas">Minhas Disciplinas</a>
-    <?php endif; ?>
-    <?php if ($isGestor || $isFuncionario): ?>
-      <a href="funcionario.php">Área de Funcionário</a>
-    <?php endif; ?>
+  <nav class="menu-nav nav nav-pills flex-wrap align-items-center gap-2">
+    <a class="nav-link <?php echo $table === 'disciplina' ? 'active' : ''; ?>" href="?table=disciplina">Disciplinas</a>
+    <a class="nav-link <?php echo $table === 'cursos' ? 'active' : ''; ?>" href="?table=cursos">Cursos</a>
+    <a class="nav-link <?php echo $table === 'matriculas' ? 'active' : ''; ?>" href="?table=matriculas">Ficha de Aluno</a>
+    <a class="nav-link <?php echo $table === 'plano_estudos' ? 'active' : ''; ?>" href="?table=plano_estudos">Planos de Estudo</a>
   </nav>
 
   <?php if ($message !== ''): ?>
@@ -1023,32 +720,34 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
   <?php if ($table === 'disciplina'): ?>
     <h2>Disciplinas</h2>
     <?php $rows = $conn->query("SELECT * FROM disciplina ORDER BY IdDisciplina DESC"); ?>
-    <table>
-      <tr>
-        <th>Disciplina</th>
-        <th>Sigla</th>
-        <?php if ($podeEditarDisciplinasCursos): ?>
-          <th>Ações</th>
-        <?php endif; ?>
-      </tr>
-      <?php while ($row = $rows->fetch_assoc()): ?>
+    <div class="table-scroll" aria-label="Lista de disciplinas com scroll">
+      <table>
         <tr>
-          <td><?php echo e($row['Disciplina']); ?></td>
-          <td><?php echo e($row['Sigla']); ?></td>
+          <th>Disciplina</th>
+          <th>Sigla</th>
           <?php if ($podeEditarDisciplinasCursos): ?>
-            <td class="actions">
-              <a href="?table=disciplina&action=edit&id=<?php echo e($row['IdDisciplina']); ?>">Editar</a>
-              <form class="inline" method="post" onsubmit="return confirm('Remover disciplina?');">
-                <input type="hidden" name="table" value="disciplina">
-                <input type="hidden" name="action" value="delete">
-                <input type="hidden" name="IdDisciplina" value="<?php echo e($row['IdDisciplina']); ?>">
-                <button type="submit">Excluir</button>
-              </form>
-            </td>
+            <th>Ações</th>
           <?php endif; ?>
         </tr>
-      <?php endwhile; ?>
-    </table>
+        <?php while ($row = $rows->fetch_assoc()): ?>
+          <tr>
+            <td><?php echo e($row['Disciplina']); ?></td>
+            <td><?php echo e($row['Sigla']); ?></td>
+            <?php if ($podeEditarDisciplinasCursos): ?>
+              <td class="actions">
+                <a class="table-action-btn edit-action-btn" href="?table=disciplina&action=edit&id=<?php echo e($row['IdDisciplina']); ?>">Editar</a>
+                <form class="inline" method="post" onsubmit="return confirm('Remover disciplina?');">
+                  <input type="hidden" name="table" value="disciplina">
+                  <input type="hidden" name="action" value="delete">
+                  <input type="hidden" name="IdDisciplina" value="<?php echo e($row['IdDisciplina']); ?>">
+                  <button type="submit" class="danger-button table-action-btn">Excluir</button>
+                </form>
+              </td>
+            <?php endif; ?>
+          </tr>
+        <?php endwhile; ?>
+      </table>
+    </div>
 
     <?php if ($podeEditarDisciplinasCursos): ?>
       <div class="form-box">
@@ -1078,32 +777,34 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
   <?php if ($table === 'cursos'): ?>
     <h2>Cursos</h2>
     <?php $rows = $conn->query("SELECT * FROM cursos ORDER BY IdCurso DESC"); ?>
-    <table>
-      <tr>
-        <th>Curso</th>
-        <th>Sigla</th>
-        <?php if ($podeEditarDisciplinasCursos): ?>
-          <th>Ações</th>
-        <?php endif; ?>
-      </tr>
-      <?php while ($row = $rows->fetch_assoc()): ?>
+    <div class="table-scroll" aria-label="Lista de cursos com scroll">
+      <table>
         <tr>
-          <td><?php echo e($row['Curso']); ?></td>
-          <td><?php echo e($row['Sigla']); ?></td>
+          <th>Curso</th>
+          <th>Sigla</th>
           <?php if ($podeEditarDisciplinasCursos): ?>
-            <td class="actions">
-              <a href="?table=cursos&action=edit&id=<?php echo e($row['IdCurso']); ?>">Editar</a>
-              <form class="inline" method="post" onsubmit="return confirm('Remover curso?');">
-                <input type="hidden" name="table" value="cursos">
-                <input type="hidden" name="action" value="delete">
-                <input type="hidden" name="IdCurso" value="<?php echo e($row['IdCurso']); ?>">
-                <button type="submit">Excluir</button>
-              </form>
-            </td>
+            <th>Ações</th>
           <?php endif; ?>
         </tr>
-      <?php endwhile; ?>
-    </table>
+        <?php while ($row = $rows->fetch_assoc()): ?>
+          <tr>
+            <td><?php echo e($row['Curso']); ?></td>
+            <td><?php echo e($row['Sigla']); ?></td>
+            <?php if ($podeEditarDisciplinasCursos): ?>
+              <td class="actions">
+                <a class="table-action-btn edit-action-btn" href="?table=cursos&action=edit&id=<?php echo e($row['IdCurso']); ?>">Editar</a>
+                <form class="inline" method="post" onsubmit="return confirm('Remover curso?');">
+                  <input type="hidden" name="table" value="cursos">
+                  <input type="hidden" name="action" value="delete">
+                  <input type="hidden" name="IdCurso" value="<?php echo e($row['IdCurso']); ?>">
+                  <button type="submit" class="danger-button table-action-btn">Excluir</button>
+                </form>
+              </td>
+            <?php endif; ?>
+          </tr>
+        <?php endwhile; ?>
+      </table>
+    </div>
 
     <?php if ($podeEditarDisciplinasCursos): ?>
       <div class="form-box">
@@ -1178,159 +879,57 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
 
           <p>
             <a class="section-link" href="?table=matriculas&action=ficha_print&id_aluno=<?php echo e($fichaAluno['IdAluno']); ?>" target="_blank" rel="noopener">Imprimir ficha</a>
-            | <a class="section-link" href="?table=matriculas&action=certificado_print&id_aluno=<?php echo e($fichaAluno['IdAluno']); ?>" target="_blank" rel="noopener">Imprimir certificado</a>
-            <?php if ($isAluno): ?>
-              | <a class="section-link" href="?table=matriculas&action=ficha_edit">Atualizar contactos/foto</a>
-              | <a class="section-link" href="?table=matriculas&action=minhas_disciplinas">Ver minhas disciplinas</a>
-            <?php endif; ?>
           </p>
-        </div>
-      <?php elseif ($isAluno): ?>
-        <div class="form-box">
-          <h3>Submeter ficha de aluno</h3>
-          <p>Preenche os teus dados pessoais e de contacto para criares a tua ficha.</p>
-          <form method="post" enctype="multipart/form-data">
-            <input type="hidden" name="table" value="matriculas">
-            <input type="hidden" name="action" value="create_self">
-
-            <label>Nome completo</label><br>
-            <input type="text" name="Nome" maxlength="25" required><br>
-
-            <label>Curso pretendido</label><br>
-            <select name="IdCurso" required>
-              <option value="">Selecione</option>
-              <?php foreach ($cursosLookup as $item): ?>
-                <option value="<?php echo e($item['IdCurso']); ?>"><?php echo e($item['Curso']); ?></option>
-              <?php endforeach; ?>
-            </select><br>
-
-            <label>Data de nascimento</label><br>
-            <input type="date" name="DataNascimento" required max="<?php echo e($dataMaximaNascimento); ?>"><br>
-
-            <label>Morada</label><br>
-            <input type="text" name="Morada" maxlength="255" required><br>
-
-            <label>Email</label><br>
-            <input type="email" name="Email" maxlength="120" required><br>
-
-            <label>Contacto telefónico</label><br>
-            <input type="text" name="Telefone" maxlength="20" required placeholder="Ex.: 912345678"><br>
-
-            <label>Foto (opcional)</label><br>
-            <input type="file" name="Foto" accept="image/*"><br>
-
-            <button type="submit">Submeter ficha para validação</button>
-          </form>
         </div>
       <?php else: ?>
         <div class="form-box">
           <p>Aluno não encontrado.</p>
         </div>
       <?php endif; ?>
-    <?php elseif ($action === 'minhas_disciplinas'): ?>
-      <h2>Minhas Disciplinas</h2>
-      <?php if ($fichaAluno): ?>
-        <div class="form-box">
-          <h3><?php echo e($fichaAluno['Nome']); ?> - <?php echo e($fichaAluno['Curso']); ?></h3>
-          <?php if (!empty($fichaDisciplinas)): ?>
-            <table>
-              <tr>
-                <th>Disciplina</th>
-                <th>Sigla</th>
-              </tr>
-              <?php foreach ($fichaDisciplinas as $disciplinaFicha): ?>
-                <tr>
-                  <td><?php echo e($disciplinaFicha['Disciplina']); ?></td>
-                  <td><?php echo e($disciplinaFicha['Sigla']); ?></td>
-                </tr>
-              <?php endforeach; ?>
-            </table>
-          <?php else: ?>
-            <p>Ainda não existem disciplinas associadas ao teu curso.</p>
-          <?php endif; ?>
-        </div>
-      <?php else: ?>
-        <div class="form-box">
-          <p>Não foi encontrada uma matrícula associada ao teu utilizador.</p>
-        </div>
-      <?php endif; ?>
-    <?php elseif ($action === 'ficha_edit'): ?>
-      <h2>Atualizar Minha Ficha</h2>
-      <?php if ($fichaAluno): ?>
-        <div class="form-box">
-          <h3><?php echo e($fichaAluno['Nome']); ?></h3>
-          <form method="post" enctype="multipart/form-data">
-            <input type="hidden" name="table" value="matriculas">
-            <input type="hidden" name="action" value="update_self">
-
-            <label>Curso pretendido</label><br>
-            <select name="IdCurso" required>
-              <option value="">Selecione</option>
-              <?php foreach ($cursosLookup as $item): ?>
-                <option value="<?php echo e($item['IdCurso']); ?>" <?php echo ((int)($fichaAluno['IdCurso'] ?? 0) === (int)$item['IdCurso']) ? 'selected' : ''; ?>>
-                  <?php echo e($item['Curso']); ?>
-                </option>
-              <?php endforeach; ?>
-            </select><br>
-
-            <label>Morada</label><br>
-            <input type="text" name="Morada" maxlength="255" required value="<?php echo e($fichaAluno['Morada'] ?? ''); ?>"><br>
-
-            <label>Email</label><br>
-            <input type="email" name="Email" maxlength="120" required value="<?php echo e($fichaAluno['Email'] ?? ''); ?>"><br>
-
-            <label>Contacto telefónico</label><br>
-            <input type="text" name="Telefone" maxlength="20" required value="<?php echo e($fichaAluno['Telefone'] ?? ''); ?>"><br>
-
-            <label>Nova Foto (opcional)</label><br>
-            <input type="file" name="Foto" accept="image/*"><br>
-
-            <button type="submit">Guardar Alterações</button>
-            <a class="cancel-link" href="?table=matriculas&action=ficha">Cancelar</a>
-          </form>
-        </div>
-      <?php else: ?>
-        <div class="form-box">
-          <p>Não foi encontrada uma matrícula associada ao teu utilizador.</p>
-        </div>
-      <?php endif; ?>
     <?php else: ?>
-      <h2>Matrículas</h2>
+      <h2>Ficha de Aluno</h2>
       <div class="form-box">
         <h3>Filtros de Pesquisa</h3>
         <form method="get" class="filters-row">
           <input type="hidden" name="table" value="matriculas">
           <input type="hidden" name="action" value="list">
 
-          <label for="filtro_q">ID/Nome</label><br>
-          <input id="filtro_q" type="text" name="q" value="<?php echo e($matriculasFiltroTexto); ?>" placeholder="Pesquisar por ID ou nome"><br>
+          <div class="filter-field">
+            <label for="filtro_q">ID/Nome</label>
+            <input id="filtro_q" type="text" name="q" value="<?php echo e($matriculasFiltroTexto); ?>" placeholder="Pesquisar por ID ou nome">
+          </div>
 
-          <label for="filtro_curso">Curso</label><br>
-          <select id="filtro_curso" name="curso">
-            <option value="0">Todos</option>
-            <?php foreach ($cursosLookup as $item): ?>
-              <option value="<?php echo e($item['IdCurso']); ?>" <?php echo $matriculasFiltroCurso === (int)$item['IdCurso'] ? 'selected' : ''; ?>>
-                <?php echo e($item['Curso']); ?>
-              </option>
-            <?php endforeach; ?>
-          </select><br>
+          <div class="filter-field">
+            <label for="filtro_curso">Curso</label>
+            <select id="filtro_curso" name="curso">
+              <option value="0">Todos</option>
+              <?php foreach ($cursosLookup as $item): ?>
+                <option value="<?php echo e($item['IdCurso']); ?>" <?php echo $matriculasFiltroCurso === (int)$item['IdCurso'] ? 'selected' : ''; ?>>
+                  <?php echo e($item['Curso']); ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </div>
 
-          <button type="submit">Filtrar</button>
-          <a class="cancel-link" href="?table=matriculas">Limpar</a>
+          <div class="filter-actions">
+            <button type="submit">Filtrar</button>
+            <a class="cancel-link" href="?table=matriculas">Limpar</a>
+          </div>
         </form>
       </div>
 
       <?php $rowsMatriculas = fetchMatriculasRows($conn, $matriculasFiltroTexto, $matriculasFiltroCurso); ?>
-      <table>
+      <div class="table-scroll matriculas-scroll" aria-label="Lista de fichas de aluno com scroll">
+      <table class="matriculas-table">
         <tr>
           <th>ID Aluno</th>
           <th>Nome</th>
-          <th>Data de Nascimento</th>
-          <th>Morada</th>
-          <th>Email</th>
+          <th class="col-nascimento">Nascimento</th>
+          <th class="col-morada">Morada</th>
+          <th class="col-email">Email</th>
           <th>Contacto</th>
-          <th>Curso</th>
-          <th>Validação</th>
+          <th class="col-curso">Curso</th>
+          <th>Estado</th>
           <th>Foto</th>
           <th>Ações</th>
         </tr>
@@ -1338,43 +937,45 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
           <tr>
             <td><?php echo e($row['IdAluno']); ?></td>
             <td><?php echo e($row['Nome']); ?></td>
-            <td><?php echo e(formatDatePt($row['DataNascimento'] ?? '')); ?></td>
-            <td><?php echo e($row['Morada'] ?? ''); ?></td>
-            <td><?php echo e($row['Email'] ?? ''); ?></td>
+            <td class="col-nascimento"><?php echo e(formatDatePt($row['DataNascimento'] ?? '')); ?></td>
+            <td class="col-morada" title="<?php echo e($row['Morada'] ?? ''); ?>"><?php echo e($row['Morada'] ?? ''); ?></td>
+            <td class="col-email" title="<?php echo e($row['Email'] ?? ''); ?>"><?php echo e($row['Email'] ?? ''); ?></td>
             <td><?php echo e($row['Telefone'] ?? ''); ?></td>
-            <td><?php echo e($row['Curso']); ?></td>
+            <td class="col-curso" title="<?php echo e($row['Curso']); ?>"><?php echo e($row['Curso']); ?></td>
             <td><?php echo e($row['EstadoValidacao'] ?? 'Pendente'); ?></td>
             <td>
               <img class="aluno-foto" src="?table=matriculas&action=foto&id_aluno=<?php echo e($row['IdAluno']); ?>" alt="Foto" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
               <span class="sem-foto">Sem foto</span>
             </td>
             <td class="actions">
-              <a href="?table=matriculas&action=edit&id_aluno=<?php echo e($row['IdAluno']); ?>">Editar</a>
-              <a href="?table=matriculas&action=ficha&id_aluno=<?php echo e($row['IdAluno']); ?>">Ver ficha</a>
-              <a href="?table=matriculas&action=certificado_print&id_aluno=<?php echo e($row['IdAluno']); ?>" target="_blank" rel="noopener">Certificado</a>
-              <a href="?table=matriculas&action=ver_disciplinas&id_aluno=<?php echo e($row['IdAluno']); ?>">Ver disciplinas</a>
-              <form class="inline inline-approve" method="post">
-                <input type="hidden" name="table" value="matriculas">
-                <input type="hidden" name="action" value="set_validation">
-                <input type="hidden" name="IdAluno" value="<?php echo e($row['IdAluno']); ?>">
-                <input type="hidden" name="EstadoValidacao" value="Aprovada">
-                <input type="text" name="ObservacoesValidacao" maxlength="500" placeholder="Observações (opcional)">
-                <button type="submit">Aprovar</button>
-              </form>
-              <form class="inline" method="post" onsubmit="return confirm('Rejeitar esta ficha?');">
-                <input type="hidden" name="table" value="matriculas">
-                <input type="hidden" name="action" value="set_validation">
-                <input type="hidden" name="IdAluno" value="<?php echo e($row['IdAluno']); ?>">
-                <input type="hidden" name="EstadoValidacao" value="Rejeitada">
-                <input type="text" name="ObservacoesValidacao" maxlength="500" placeholder="Observações (opcional)">
-                <button type="submit">Rejeitar</button>
-              </form>
-              <?php if (!$isGestor): ?>
-                <form class="inline" method="post" onsubmit="return confirm('Remover matrícula?');">
+              <?php $estadoLinha = normalizarEstadoValidacao($row['EstadoValidacao'] ?? 'Pendente'); ?>
+              <?php if ($estadoLinha === 'Aprovada'): ?>
+                <a class="table-action-btn edit-action-btn" href="?table=matriculas&action=edit&id_aluno=<?php echo e($row['IdAluno']); ?>">Editar</a>
+                <?php if ($isGestor): ?>
+                  <button type="submit" form="delete-matricula-<?php echo e($row['IdAluno']); ?>" class="danger-button table-action-btn" onclick="return confirm('Remover matrícula?');">Excluir</button>
+                <?php endif; ?>
+              <?php else: ?>
+                <form class="validation-actions" method="post">
+                  <input type="hidden" name="table" value="matriculas">
+                  <input type="hidden" name="action" value="set_validation">
+                  <input type="hidden" name="IdAluno" value="<?php echo e($row['IdAluno']); ?>">
+
+                  <input id="obs-<?php echo e($row['IdAluno']); ?>" type="text" name="ObservacoesValidacao" maxlength="500" placeholder="Observações para o aluno" aria-label="Observações para o aluno">
+
+                  <div class="validation-buttons">
+                    <button type="submit" name="EstadoValidacao" value="Aprovada">Aprovar</button>
+                    <button type="submit" name="EstadoValidacao" value="Rejeitada" class="danger-button" onclick="return confirm('Rejeitar esta ficha?');">Rejeitar</button>
+                    <?php if ($isGestor): ?>
+                      <button type="submit" form="delete-matricula-<?php echo e($row['IdAluno']); ?>" class="danger-button" onclick="return confirm('Remover matrícula?');">Excluir</button>
+                    <?php endif; ?>
+                  </div>
+                </form>
+              <?php endif; ?>
+              <?php if ($isGestor): ?>
+                <form id="delete-matricula-<?php echo e($row['IdAluno']); ?>" class="inline" method="post">
                   <input type="hidden" name="table" value="matriculas">
                   <input type="hidden" name="action" value="delete">
                   <input type="hidden" name="IdAluno" value="<?php echo e($row['IdAluno']); ?>">
-                  <button type="submit">Excluir</button>
                 </form>
               <?php endif; ?>
             </td>
@@ -1386,6 +987,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
           </tr>
         <?php endif; ?>
       </table>
+      </div>
 
       <?php if ($editData): ?>
         <?php if ($isGestor): ?>
@@ -1527,35 +1129,37 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
            ORDER BY c.Curso, pe.Ano, pe.Semestre, d.Disciplina"
         );
     ?>
-    <table>
-      <tr>
-          <th>Disciplina</th>
-          <th>Curso</th>
-          <th>Ano</th>
-          <th>Semestre</th>
-          <th>Ações</th>
-      </tr>
-      <?php while ($row = $rows->fetch_assoc()): ?>
+    <div class="table-scroll" aria-label="Lista do plano de estudos com scroll">
+      <table>
         <tr>
-            <td><?php echo e($row['Disciplina']); ?></td>
-            <td><?php echo e($row['Curso']); ?></td>
-            <td><?php echo e($row['Ano'] ?? ''); ?></td>
-            <td><?php echo e($row['Semestre'] ?? ''); ?></td>
-            <td class="actions">
-              <a href="?table=plano_estudos&action=edit&id_disciplina=<?php echo e($row['IdDisciplina']); ?>&id_curso=<?php echo e($row['IdCurso']); ?>&id_ano=<?php echo e($row['Ano']); ?>&id_semestre=<?php echo e($row['Semestre']); ?>">Editar</a>
-              <form class="inline" method="post" onsubmit="return confirm('Remover ligação do plano?');">
-                <input type="hidden" name="table" value="plano_estudos">
-                <input type="hidden" name="action" value="delete">
-                <input type="hidden" name="IdDisciplina" value="<?php echo e($row['IdDisciplina']); ?>">
-                <input type="hidden" name="IdCurso" value="<?php echo e($row['IdCurso']); ?>">
-                <input type="hidden" name="Ano" value="<?php echo e($row['Ano']); ?>">
-                <input type="hidden" name="Semestre" value="<?php echo e($row['Semestre']); ?>">
-                <button type="submit">Excluir</button>
-              </form>
-            </td>
+            <th>Disciplina</th>
+            <th>Curso</th>
+            <th>Ano</th>
+            <th>Semestre</th>
+            <th>Ações</th>
         </tr>
-      <?php endwhile; ?>
-    </table>
+        <?php while ($row = $rows->fetch_assoc()): ?>
+          <tr>
+              <td><?php echo e($row['Disciplina']); ?></td>
+              <td><?php echo e($row['Curso']); ?></td>
+              <td><?php echo e($row['Ano'] ?? ''); ?></td>
+              <td><?php echo e($row['Semestre'] ?? ''); ?></td>
+              <td class="actions">
+                <a class="action-button table-action-btn" href="?table=plano_estudos&action=edit&id_disciplina=<?php echo e($row['IdDisciplina']); ?>&id_curso=<?php echo e($row['IdCurso']); ?>&id_ano=<?php echo e($row['Ano']); ?>&id_semestre=<?php echo e($row['Semestre']); ?>">Editar</a>
+                <form class="inline" method="post" onsubmit="return confirm('Remover ligação do plano?');">
+                  <input type="hidden" name="table" value="plano_estudos">
+                  <input type="hidden" name="action" value="delete">
+                  <input type="hidden" name="IdDisciplina" value="<?php echo e($row['IdDisciplina']); ?>">
+                  <input type="hidden" name="IdCurso" value="<?php echo e($row['IdCurso']); ?>">
+                  <input type="hidden" name="Ano" value="<?php echo e($row['Ano']); ?>">
+                  <input type="hidden" name="Semestre" value="<?php echo e($row['Semestre']); ?>">
+                  <button type="submit" class="table-action-btn">Excluir</button>
+                </form>
+              </td>
+          </tr>
+        <?php endwhile; ?>
+      </table>
+    </div>
 
     <div class="form-box">
       <h3><?php echo $editData ? 'Editar Ligação' : 'Nova Ligação'; ?></h3>

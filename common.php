@@ -186,6 +186,8 @@ if (!function_exists('ensureMatriculasExtraFields')) {
       'EstadoValidacao' => "ALTER TABLE matriculas ADD COLUMN EstadoValidacao VARCHAR(20) NOT NULL DEFAULT 'Pendente' AFTER Telefone",
       'ObservacoesValidacao' => "ALTER TABLE matriculas ADD COLUMN ObservacoesValidacao TEXT NULL AFTER EstadoValidacao",
       'Foto' => "ALTER TABLE matriculas ADD COLUMN Foto LONGBLOB NULL AFTER ObservacoesValidacao",
+      'ValidadoPor' => "ALTER TABLE matriculas ADD COLUMN ValidadoPor VARCHAR(80) NULL AFTER ObservacoesValidacao",
+      'DataValidacao' => "ALTER TABLE matriculas ADD COLUMN DataValidacao DATETIME NULL AFTER ValidadoPor",
     ];
 
     foreach ($columns as $columnName => $alterSql) {
@@ -295,6 +297,30 @@ if (!function_exists('ensurePlanoEstudosSchema')) {
     }
 
     return true;
+  }
+}
+
+if (!function_exists('ensurePedidosSchema')) {
+  function ensurePedidosSchema(mysqli $conn)
+  {
+    $sql = "
+      CREATE TABLE IF NOT EXISTS pedidos_matricula (
+        IdPedido INT AUTO_INCREMENT PRIMARY KEY,
+        NomeCandidato VARCHAR(120) NOT NULL,
+        Email VARCHAR(150) NULL,
+        IdCurso INT NULL,
+        Observacoes VARCHAR(255) NULL,
+        Estado ENUM('Pendente', 'Aprovado', 'Rejeitado') NOT NULL DEFAULT 'Pendente',
+        ObservacaoDecisao VARCHAR(255) NULL,
+        DecididoPor VARCHAR(80) NULL,
+        DataPedido DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        DataDecisao DATETIME NULL,
+        INDEX idx_pedido_estado (Estado),
+        INDEX idx_pedido_curso (IdCurso)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ";
+
+    return $conn->query($sql);
   }
 }
 

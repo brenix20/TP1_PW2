@@ -159,14 +159,20 @@ function e($valor)
 	return htmlspecialchars((string)$valor, ENT_QUOTES, 'UTF-8');
 }
 
-$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$currentScheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$scheme = 'https';
 $httpHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
-$hostSemPorta = $httpHost;
+$hostSemPorta = 'localhost';
 $porta = '';
-if (strpos($httpHost, ':') !== false) {
-	$partesHost = explode(':', $httpHost, 2);
-	$hostSemPorta = $partesHost[0];
-	$porta = $partesHost[1] ?? '';
+$partesHost = parse_url($currentScheme . '://' . $httpHost);
+if (is_array($partesHost)) {
+	$hostParse = trim((string)($partesHost['host'] ?? ''));
+	if ($hostParse !== '') {
+		$hostSemPorta = $hostParse;
+	}
+	if (isset($partesHost['port'])) {
+		$porta = (string)$partesHost['port'];
+	}
 }
 
 $hostOriginal = strtolower($hostSemPorta);
@@ -207,11 +213,33 @@ if (in_array($hostOriginal, ['localhost', '127.0.0.1', '::1'], true)) {
 	}
 }
 
-$portaParte = ($porta !== '' && $porta !== '80' && $porta !== '443') ? ':' . $porta : '';
+$portaParte = '';
+if ($porta !== '') {
+	if ($scheme === 'https') {
+		if (!in_array($porta, ['', '80', '8080', '443'], true)) {
+			$portaParte = ':' . $porta;
+		}
+	} elseif ($porta !== '80') {
+		$portaParte = ':' . $porta;
+	}
+}
 $scriptAtual = $_SERVER['SCRIPT_NAME'] ?? '/Ipca/Aulas/login.php';
-$urlAcessoMovel = $scheme . '://' . $hostParaQr . $portaParte . $scriptAtual;
+$hostParaUrl = $hostParaQr;
+if (strpos($hostParaUrl, ':') !== false && strpos($hostParaUrl, '[') !== 0) {
+	$hostParaUrl = '[' . $hostParaUrl . ']';
+}
+
+$urlAcessoMovel = $scheme . '://' . $hostParaUrl . $portaParte . $scriptAtual;
 $usaHostLocal = in_array($hostOriginal, ['localhost', '127.0.0.1', '::1'], true);
-$urlQrImagem = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=' . urlencode($urlAcessoMovel);
+$pedidoAtualEmHttp = ($currentScheme !== 'https');
+$qrProviders = [
+	'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=',
+	'https://chart.googleapis.com/chart?chs=240x240&cht=qr&chl=',
+	'https://quickchart.io/qr?size=240&text=',
+];
+$urlQrImagem = $qrProviders[0] . urlencode($urlAcessoMovel);
+$qrProvidersJson = json_encode($qrProviders, JSON_UNESCAPED_SLASHES);
+$qrProvidersJson = is_string($qrProvidersJson) ? $qrProvidersJson : '[]';
 $stylesVersion = (string)(@filemtime(__DIR__ . '/styles.css') ?: time());
 $stylesHref = 'styles.css?v=' . rawurlencode($stylesVersion);
 
@@ -281,6 +309,9 @@ if ($baseDadosDisponivel) {
 		<div class="qr-access">
 			<h2 class="auth-title">Entrar pelo telemóvel</h2>
 			<p class="qr-help">Lê o QR Code para abrir esta página no telemóvel e fazer login ou criar conta.</p>
+			<?php if ($pedidoAtualEmHttp): ?>
+				<p class="qr-help">O QR está a gerar link HTTPS. Garante que o Apache SSL do XAMPP está ativo (porta 443).</p>
+			<?php endif; ?>
 			<?php if ($usaHostLocal): ?>
 				<p class="qr-help">Se não abrir no telemóvel, substitui o host pelo IP da tua rede local (ex: 192.168.x.x).</p>
 			<?php endif; ?>
@@ -289,9 +320,10 @@ if ($baseDadosDisponivel) {
 			<input id="url_qr" type="text" value="<?php echo e($urlAcessoMovel); ?>">
 
 			<button id="botao_qr" class="secondary-button" type="button">Atualizar QR Code</button>
+			<p id="estado_qr" class="qr-help" hidden>Não foi possível gerar a imagem de QR Code automaticamente. Usa o link acima no telemóvel.</p>
 
 			<div class="qr-preview">
-				<img id="imagem_qr" src="<?php echo e($urlQrImagem); ?>" alt="QR Code de acesso ao login">
+				<img id="imagem_qr" src="<?php echo e($urlQrImagem); ?>" data-providers="<?php echo e($qrProvidersJson); ?>" alt="QR Code de acesso ao login">
 			</div>
 		</div>
 	</div>
@@ -301,18 +333,62 @@ if ($baseDadosDisponivel) {
 			var inputUrl = document.getElementById('url_qr');
 			var imagemQr = document.getElementById('imagem_qr');
 			var botaoQr = document.getElementById('botao_qr');
-			var baseQr = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=';
+			var estadoQr = document.getElementById('estado_qr');
+			var providers = [];
+			var providerIndex = 0;
+			var destinoAtual = '';
 
-			function atualizarQr() {
-				var destino = (inputUrl.value || '').trim();
-				if (!destino) {
+			if (!inputUrl || !imagemQr || !botaoQr) {
+				return;
+			}
+
+			try {
+				providers = JSON.parse(imagemQr.getAttribute('data-providers') || '[]');
+			} catch (e) {
+				providers = [];
+			}
+
+			if (!Array.isArray(providers) || providers.length === 0) {
+				providers = ['https://api.qrserver.com/v1/create-qr-code/?size=240x240&data='];
+			}
+
+			function renderQrComFallback() {
+				if (!destinoAtual) {
 					return;
 				}
-				imagemQr.src = baseQr + encodeURIComponent(destino);
+
+				if (providerIndex >= providers.length) {
+					if (estadoQr) {
+						estadoQr.hidden = false;
+					}
+					return;
+				}
+
+				if (estadoQr) {
+					estadoQr.hidden = true;
+				}
+
+				imagemQr.src = providers[providerIndex] + encodeURIComponent(destinoAtual) + '&_t=' + Date.now();
 			}
+
+			function atualizarQr() {
+				destinoAtual = (inputUrl.value || '').trim();
+				if (!destinoAtual) {
+					return;
+				}
+
+				providerIndex = 0;
+				renderQrComFallback();
+			}
+
+			imagemQr.addEventListener('error', function () {
+				providerIndex += 1;
+				renderQrComFallback();
+			});
 
 			botaoQr.addEventListener('click', atualizarQr);
 			inputUrl.addEventListener('change', atualizarQr);
+			inputUrl.addEventListener('blur', atualizarQr);
 		})();
 	</script>
 </body>
