@@ -686,21 +686,7 @@ if ($table === 'matriculas' && $action === 'ficha_print') {
   echo '<p><strong>Morada:</strong> ' . e($fichaAluno['Morada'] ?? '') . '</p>';
   echo '<p><strong>Email:</strong> ' . e($fichaAluno['Email'] ?? '') . '</p>';
   echo '<p><strong>Contacto:</strong> ' . e($fichaAluno['Telefone'] ?? '') . '</p>';
-  echo '<p><strong>Curso pretendido:</strong> ' . e($fichaAluno['Curso']) . ' (' . e($fichaAluno['SiglaCurso']) . ')</p>';
-  echo '<p><strong>Estado de validação:</strong> ' . e($fichaAluno['EstadoValidacao'] ?? 'Pendente') . '</p>';
   echo '</div>';
-
-  echo '<h3 class="document-section-title">Disciplinas do Curso</h3>';
-
-  if (!empty($fichaDisciplinas)) {
-    echo "<table class=\"document-table\"><thead><tr><th>Disciplina</th><th>Sigla</th></tr></thead><tbody>";
-    foreach ($fichaDisciplinas as $disciplinaFicha) {
-      echo '<tr><td>' . e($disciplinaFicha['Disciplina']) . '</td><td>' . e($disciplinaFicha['Sigla']) . '</td></tr>';
-    }
-    echo "</tbody></table>";
-  } else {
-    echo '<p class="document-empty">Não existem disciplinas associadas ao curso deste aluno.</p>';
-  }
 
   echo '</div></body></html>';
   $conn->close();
@@ -738,8 +724,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
   echo '<p><strong>Morada:</strong> ' . e($fichaAluno['Morada'] ?? '') . '</p>';
   echo '<p><strong>Email:</strong> ' . e($fichaAluno['Email'] ?? '') . '</p>';
   echo '<p><strong>Contacto:</strong> ' . e($fichaAluno['Telefone'] ?? '') . '</p>';
-  echo '<p><strong>Curso pretendido:</strong> ' . e($fichaAluno['Curso']) . ' (' . e($fichaAluno['SiglaCurso']) . ')</p>';
-  echo '<p><strong>Estado de validação:</strong> ' . e($fichaAluno['EstadoValidacao'] ?? 'Pendente') . '</p>';
+  echo '<p><strong>Curso:</strong> ' . e($fichaAluno['Curso']) . ' (' . e($fichaAluno['SiglaCurso']) . ')</p>';
   echo '<p><strong>Data de emissão:</strong> ' . e($dataAtual) . '</p>';
   echo '</div>';
 
@@ -1003,7 +988,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
             <input type="text" name="Telefone" maxlength="20" required placeholder="Ex.: 912345678"><br>
 
             <label>Foto (opcional)</label><br>
-            <input type="file" name="Foto" accept="image/*"><br>
+            <input type="file" name="Foto" accept=".jpg,.png"><br>
 
             <button type="submit">Submeter ficha para validação</button>
           </form>
@@ -1069,7 +1054,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
             <input type="text" name="Telefone" maxlength="20" required value="<?php echo e($fichaAluno['Telefone'] ?? ''); ?>"><br>
 
             <label>Nova Foto (opcional)</label><br>
-            <input type="file" name="Foto" accept="image/*"><br>
+            <input type="file" name="Foto" accept=".jpg,.png"><br>
 
             <button type="submit">Guardar Alterações</button>
             <a class="cancel-link" href="?table=matriculas&action=ficha">Cancelar</a>
@@ -1211,8 +1196,8 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
           <label>Contacto telefónico</label><br>
           <input type="text" name="Telefone" maxlength="20" required value="<?php echo e($editData['Telefone'] ?? ''); ?>"><br>
 
-          <label>Foto (opcional)</label><br>
-          <input type="file" name="Foto" accept="image/*"><br>
+          <label>Foto</label><br>
+          <input type="file" name="Foto" accept=".jpg,.png"><br>
 
           <button type="submit"><?php echo $editData ? 'Atualizar' : 'Criar'; ?></button>
           <?php if ($editData): ?>

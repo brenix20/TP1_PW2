@@ -158,10 +158,23 @@ if (!function_exists('getUploadedImageBlob')) {
       return false;
     }
 
+    $fileName = trim((string)($_FILES[$fieldName]['name'] ?? ''));
+    $extension = strtolower((string)pathinfo($fileName, PATHINFO_EXTENSION));
+    if (!in_array($extension, ['jpg', 'png'], true)) {
+      $errorMessage = 'A foto deve estar no formato .jpg ou .png.';
+      return false;
+    }
+
     $tmpFile = $_FILES[$fieldName]['tmp_name'];
     $imageInfo = @getimagesize($tmpFile);
     if ($imageInfo === false) {
       $errorMessage = 'O ficheiro enviado não é uma imagem válida.';
+      return false;
+    }
+
+    $mimeType = strtolower((string)($imageInfo['mime'] ?? ''));
+    if (!in_array($mimeType, ['image/jpeg', 'image/png'], true)) {
+      $errorMessage = 'A foto deve estar no formato .jpg ou .png.';
       return false;
     }
 
@@ -306,6 +319,7 @@ if (!function_exists('ensurePedidosSchema')) {
     $sql = "
       CREATE TABLE IF NOT EXISTS pedidos_matricula (
         IdPedido INT AUTO_INCREMENT PRIMARY KEY,
+        IdAluno INT NULL,
         NomeCandidato VARCHAR(120) NOT NULL,
         Email VARCHAR(150) NULL,
         IdCurso INT NULL,
@@ -315,12 +329,61 @@ if (!function_exists('ensurePedidosSchema')) {
         DecididoPor VARCHAR(80) NULL,
         DataPedido DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         DataDecisao DATETIME NULL,
+        INDEX idx_pedido_aluno (IdAluno),
         INDEX idx_pedido_estado (Estado),
         INDEX idx_pedido_curso (IdCurso)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ";
 
-    return $conn->query($sql);
+    if (!$conn->query($sql)) {
+      return false;
+    }
+
+    $resultCol = $conn->query(
+      "SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'pedidos_matricula'
+         AND COLUMN_NAME = 'IdAluno'
+       LIMIT 1"
+    );
+
+    if (!$resultCol) {
+      return false;
+    }
+
+    $hasIdAluno = $resultCol->num_rows > 0;
+    $resultCol->close();
+
+    if (!$hasIdAluno) {
+      if (!$conn->query("ALTER TABLE pedidos_matricula ADD COLUMN IdAluno INT NULL AFTER IdPedido")) {
+        return false;
+      }
+    }
+
+    $resultIdx = $conn->query(
+      "SELECT INDEX_NAME
+       FROM INFORMATION_SCHEMA.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'pedidos_matricula'
+         AND INDEX_NAME = 'idx_pedido_aluno'
+       LIMIT 1"
+    );
+
+    if (!$resultIdx) {
+      return false;
+    }
+
+    $hasIdxAluno = $resultIdx->num_rows > 0;
+    $resultIdx->close();
+
+    if (!$hasIdxAluno) {
+      if (!$conn->query("ALTER TABLE pedidos_matricula ADD INDEX idx_pedido_aluno (IdAluno)")) {
+        return false;
+      }
+    }
+
+    return true;
   }
 }
 

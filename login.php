@@ -309,13 +309,6 @@ if ($baseDadosDisponivel) {
 		<div class="qr-access">
 			<h2 class="auth-title">Entrar pelo telemóvel</h2>
 			<p class="qr-help">Lê o QR Code para abrir esta página no telemóvel e fazer login ou criar conta.</p>
-			<?php if ($pedidoAtualEmHttp): ?>
-				<p class="qr-help">O QR está a gerar link HTTPS. Garante que o Apache SSL do XAMPP está ativo (porta 443).</p>
-			<?php endif; ?>
-			<?php if ($usaHostLocal): ?>
-				<p class="qr-help">Se não abrir no telemóvel, substitui o host pelo IP da tua rede local (ex: 192.168.x.x).</p>
-			<?php endif; ?>
-
 			<label for="url_qr">Link para QR Code</label>
 			<input id="url_qr" type="text" value="<?php echo e($urlAcessoMovel); ?>">
 

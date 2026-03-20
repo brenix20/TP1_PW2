@@ -36,22 +36,7 @@ function anoLetivoAtual()
 
 function ensureFuncionarioSchema(mysqli $conn)
 {
-  $sqlPedidos = "
-    CREATE TABLE IF NOT EXISTS pedidos_matricula (
-      IdPedido INT AUTO_INCREMENT PRIMARY KEY,
-      NomeCandidato VARCHAR(120) NOT NULL,
-      Email VARCHAR(150) NULL,
-      IdCurso INT NULL,
-      Observacoes VARCHAR(255) NULL,
-      Estado ENUM('Pendente', 'Aprovado', 'Rejeitado') NOT NULL DEFAULT 'Pendente',
-      ObservacaoDecisao VARCHAR(255) NULL,
-      DecididoPor VARCHAR(80) NULL,
-      DataPedido DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      DataDecisao DATETIME NULL,
-      INDEX idx_pedido_estado (Estado),
-      INDEX idx_pedido_curso (IdCurso)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-  ";
+  $pedidosReady = function_exists('ensurePedidosSchema') ? ensurePedidosSchema($conn) : false;
 
   $sqlNotas = "
     CREATE TABLE IF NOT EXISTS notas_avaliacao (
@@ -70,7 +55,7 @@ function ensureFuncionarioSchema(mysqli $conn)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   ";
 
-  return $conn->query($sqlPedidos) && $conn->query($sqlNotas);
+  return $pedidosReady && $conn->query($sqlNotas);
 }
 
 
@@ -378,7 +363,7 @@ if (!in_array($pedidosEstado, ['todos', 'Pendente', 'Aprovado', 'Rejeitado'], tr
 $pedidosQ = trim((string)($_GET['q'] ?? ''));
 
 $sqlPedidos =
-  'SELECT pm.IdPedido, pm.NomeCandidato, pm.Email, pm.Estado, pm.ObservacaoDecisao, pm.DecididoPor, pm.DataPedido, pm.DataDecisao, c.Curso
+  'SELECT pm.IdPedido, pm.IdAluno, pm.NomeCandidato, pm.Estado, pm.ObservacaoDecisao, pm.DecididoPor, pm.DataPedido, pm.DataDecisao, c.Curso
    FROM pedidos_matricula pm
    LEFT JOIN cursos c ON c.IdCurso = pm.IdCurso
    WHERE 1 = 1';
@@ -390,7 +375,7 @@ if ($pedidosEstado !== 'todos') {
 
 if ($pedidosQ !== '') {
   $qEscaped = $conn->real_escape_string('%' . $pedidosQ . '%');
-  $sqlPedidos .= " AND (pm.NomeCandidato LIKE '{$qEscaped}' OR CAST(pm.IdPedido AS CHAR) LIKE '{$qEscaped}' OR IFNULL(c.Curso, '') LIKE '{$qEscaped}')";
+  $sqlPedidos .= " AND (pm.NomeCandidato LIKE '{$qEscaped}' OR CAST(pm.IdPedido AS CHAR) LIKE '{$qEscaped}' OR CAST(IFNULL(pm.IdAluno, 0) AS CHAR) LIKE '{$qEscaped}' OR IFNULL(c.Curso, '') LIKE '{$qEscaped}')";
 }
 
 $sqlPedidos .= ' ORDER BY pm.DataPedido DESC';
@@ -599,6 +584,62 @@ $printMode = $section === 'pautas' && (($_GET['print'] ?? '') === '1');
     .print-header h2 {
       margin: 0;
     }
+
+    .matriculas-scroll {
+      max-height: 460px;
+      overflow-y: auto;
+    }
+
+    .pedidos-scroll {
+      max-height: 460px;
+      overflow-y: auto;
+    }
+
+    .matriculas-scroll table {
+      margin: 0;
+    }
+
+    .pedidos-scroll table {
+      margin: 0;
+    }
+
+    .matriculas-scroll table tr:first-child th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    .pedidos-scroll table tr:first-child th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    .notas-scroll {
+      max-height: 460px;
+      overflow-y: auto;
+    }
+
+    .notas-scroll table {
+      margin: 0;
+    }
+
+    .notas-scroll table tr:first-child th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    .notas-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: nowrap;
+      align-items: center;
+    }
+
+    .notas-actions .inline {
+      margin: 0;
+    }
   </style>
 </head>
 <body class="app-page<?php echo $printMode ? ' document-page' : ''; ?>">
@@ -699,11 +740,12 @@ $printMode = $section === 'pautas' && (($_GET['print'] ?? '') === '1');
 
       <p class="stats-row">Total de pedidos: <?php echo e(count($rowsPedidos)); ?></p>
 
+      <div class="pedidos-scroll">
       <table>
         <tr>
           <th>ID</th>
+          <th>ID Aluno</th>
           <th>Candidato</th>
-          <th>Email</th>
           <th>Curso</th>
           <th>Data pedido</th>
           <th>Estado</th>
@@ -717,8 +759,8 @@ $printMode = $section === 'pautas' && (($_GET['print'] ?? '') === '1');
           ?>
           <tr>
             <td><?php echo e($rowPedido['IdPedido']); ?></td>
+            <td><?php echo e($rowPedido['IdAluno'] ?? '-'); ?></td>
             <td><strong><?php echo e($rowPedido['NomeCandidato']); ?></strong></td>
-            <td><?php echo e($rowPedido['Email'] ?? ''); ?></td>
             <td><?php echo e($rowPedido['Curso'] ?? 'Sem curso'); ?></td>
             <td><?php echo e($rowPedido['DataPedido']); ?></td>
             <td><span class="status-pill <?php echo e($statusClass); ?>"><?php echo e($estadoAtual); ?></span></td>
@@ -750,6 +792,7 @@ $printMode = $section === 'pautas' && (($_GET['print'] ?? '') === '1');
           </tr>
         <?php endif; ?>
       </table>
+      </div>
     <?php endif; ?>
 
     <?php if ($section === 'matriculas'): ?>
@@ -774,6 +817,7 @@ $printMode = $section === 'pautas' && (($_GET['print'] ?? '') === '1');
 
       <p class="stats-row">Total de fichas: <?php echo e(count($rowsMatriculas)); ?></p>
 
+      <div class="matriculas-scroll">
       <table>
         <tr>
           <th>ID</th>
@@ -808,6 +852,7 @@ $printMode = $section === 'pautas' && (($_GET['print'] ?? '') === '1');
           </tr>
         <?php endif; ?>
       </table>
+      </div>
     <?php endif; ?>
     <?php if ($section === 'notas'): ?>
       <h2>Registo e Edição de Notas</h2>
@@ -896,6 +941,7 @@ $printMode = $section === 'pautas' && (($_GET['print'] ?? '') === '1');
         </form>
       </div>
 
+      <div class="notas-scroll">
       <table>
         <tr>
           <th>Aluno</th>
@@ -917,12 +963,12 @@ $printMode = $section === 'pautas' && (($_GET['print'] ?? '') === '1');
             <td><?php echo e($rowNota['AnoLetivo']); ?></td>
             <td><?php echo e(number_format((float)$rowNota['Nota'], 1)); ?></td>
             <td><?php echo e($resultado); ?></td>
-            <td class="actions">
-              <a href="?section=notas&action=edit&id_nota=<?php echo e($rowNota['IdNota']); ?>">Editar</a>
+            <td class="actions notas-actions">
+              <a class="table-action-btn edit-action-btn" href="?section=notas&action=edit&id_nota=<?php echo e($rowNota['IdNota']); ?>">Editar</a>
               <form class="inline" method="post" onsubmit="return confirm('Eliminar esta nota?');">
                 <input type="hidden" name="post_action" value="eliminar_nota">
                 <input type="hidden" name="IdNota" value="<?php echo e($rowNota['IdNota']); ?>">
-                <button type="submit">Excluir</button>
+                <button class="table-action-btn danger-button" type="submit">Excluir</button>
               </form>
             </td>
           </tr>
@@ -933,6 +979,7 @@ $printMode = $section === 'pautas' && (($_GET['print'] ?? '') === '1');
           </tr>
         <?php endif; ?>
       </table>
+      </div>
     <?php endif; ?>
 
     <?php if ($section === 'pautas'): ?>
