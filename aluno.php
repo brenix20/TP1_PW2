@@ -89,7 +89,7 @@ if (!isset($allowedTables[$table])) {
 $action = $_GET['action'] ?? 'list';
 $allowedActions = $isGestor
 	? ['list', 'edit', 'foto', 'ver_disciplinas', 'ficha', 'ficha_print', 'certificado_print', 'print']
-	: ($isAluno ? ['list', 'ficha', 'ficha_print', 'certificado_print', 'foto', 'ficha_edit', 'minhas_disciplinas'] : ['list']);
+	: ($isAluno ? ['list', 'ficha', 'ficha_print', 'certificado_print', 'foto', 'ficha_edit', 'minhas_disciplinas', 'minha_turma'] : ['list']);
 
 if (!in_array($action, $allowedActions, true)) {
 	$action = 'list';
@@ -105,6 +105,10 @@ if ($isAluno && $table === 'matriculas' && $action === 'list') {
 
 if ($isAluno && $table === 'matriculas' && $action === 'minhas_disciplinas' && !$alunoMatriculaEfetivada) {
 	redirectWithMessage('matriculas', 'error', 'A opção Minhas Disciplinas fica disponível apenas após o funcionário aprovar o teu pedido de matrícula.');
+}
+
+if ($isAluno && $table === 'matriculas' && $action === 'minha_turma' && !$alunoMatriculaEfetivada) {
+	redirectWithMessage('matriculas', 'error', 'A opção Minha Turma fica disponível apenas após o funcionário aprovar o teu pedido de matrícula.');
 }
 
 if ($isAluno && $table === 'matriculas' && $action === 'ficha_print' && $alunoEstadoFichaNormalizado !== 'Aprovada') {
@@ -418,6 +422,7 @@ $alunoNome = '';
 $alunoIdSelecionado = 0;
 $fichaAluno = null;
 $fichaDisciplinas = [];
+$turmaColegas = [];
 if ($action === 'edit') {
 	if ($table === 'disciplina') {
 		$id = (int)($_GET['id'] ?? 0);
@@ -492,7 +497,7 @@ if ($table === 'matriculas' && $action === 'ver_disciplinas') {
 	}
 }
 
-if ($table === 'matriculas' && in_array($action, ['ficha', 'ficha_print', 'certificado_print', 'ficha_edit', 'minhas_disciplinas'], true)) {
+if ($table === 'matriculas' && in_array($action, ['ficha', 'ficha_print', 'certificado_print', 'ficha_edit', 'minhas_disciplinas', 'minha_turma'], true)) {
 	if ($isAluno) {
 		$alunoIdSelecionado = $alunoIdSessao;
 	} else {
@@ -526,6 +531,40 @@ if ($table === 'matriculas' && in_array($action, ['ficha', 'ficha_print', 'certi
 			$fichaDisciplinas[] = $row;
 		}
 		$stmtFichaDisciplinas->close();
+
+		if ($isAluno && $action === 'minha_turma') {
+			$stmtTurma = $conn->prepare(
+				"SELECT m.IdAluno, m.Nome
+				 FROM matriculas m
+				 LEFT JOIN (
+				 	SELECT p.IdAluno, p.Estado
+				 	FROM pedidos_matricula p
+				 	JOIN (
+				 		SELECT IdAluno, MAX(IdPedido) AS UltimoPedido
+				 		FROM pedidos_matricula
+				 		WHERE IdAluno IS NOT NULL
+				 		GROUP BY IdAluno
+				 	) ult ON ult.IdAluno = p.IdAluno AND ult.UltimoPedido = p.IdPedido
+				 ) pedidoAtual ON pedidoAtual.IdAluno = m.IdAluno
+				 WHERE m.IdCurso = ?
+				   AND (
+				     (m.EstadoValidacao = 'Aprovada' AND pedidoAtual.Estado = 'Aprovado')
+				     OR CAST(m.IdAluno AS CHAR) LIKE '9900%'
+				   )
+				 ORDER BY CASE WHEN m.IdAluno = ? THEN 0 ELSE 1 END, m.Nome ASC"
+			);
+
+			if ($stmtTurma) {
+				$idCursoTurma = (int)($fichaAluno['IdCurso'] ?? 0);
+				$stmtTurma->bind_param('ii', $idCursoTurma, $alunoIdSessao);
+				$stmtTurma->execute();
+				$resultTurma = $stmtTurma->get_result();
+				while ($resultTurma && ($rowTurma = $resultTurma->fetch_assoc())) {
+					$turmaColegas[] = $rowTurma;
+				}
+				$stmtTurma->close();
+			}
+		}
 	}
 }
 
@@ -682,6 +721,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
 		<?php endif; ?>
 		<?php if ($alunoMatriculaEfetivada): ?>
 			<a class="nav-link <?php echo ($table === 'matriculas' && $action === 'minhas_disciplinas') ? 'active' : ''; ?>" href="?table=matriculas&action=minhas_disciplinas">Minhas Disciplinas</a>
+			<a class="nav-link <?php echo ($table === 'matriculas' && $action === 'minha_turma') ? 'active' : ''; ?>" href="?table=matriculas&action=minha_turma">Minha Turma</a>
 		<?php endif; ?>
 	</nav>
 
@@ -929,6 +969,49 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
 						</table>
 					<?php else: ?>
 						<p>Ainda não existem disciplinas associadas ao teu curso.</p>
+					<?php endif; ?>
+				</div>
+			<?php else: ?>
+				<div class="form-box">
+					<p>Não foi encontrada uma matrícula associada ao teu utilizador.</p>
+				</div>
+			<?php endif; ?>
+		<?php elseif ($action === 'minha_turma'): ?>
+			<h2>Minha Turma</h2>
+			<?php if ($fichaAluno): ?>
+				<div class="form-box">
+					<?php
+						$totalTurma = count($turmaColegas);
+						$totalColegas = 0;
+						foreach ($turmaColegas as $colegaTurma) {
+							if ((int)($colegaTurma['IdAluno'] ?? 0) !== (int)$alunoIdSessao) {
+								$totalColegas += 1;
+							}
+						}
+					?>
+					<h3><?php echo e($fichaAluno['Curso']); ?></h3>
+					<p><strong>Total de alunos matriculados:</strong> <?php echo e($totalTurma); ?></p>
+					<p><strong>Colegas na tua turma:</strong> <?php echo e($totalColegas); ?></p>
+					<?php if (!empty($turmaColegas)): ?>
+						<div class="table-scroll" aria-label="Lista da minha turma">
+							<table>
+								<tr>
+									<th>Nº Aluno</th>
+									<th>Nome</th>
+									<th>Observação</th>
+								</tr>
+								<?php foreach ($turmaColegas as $colegaTurma): ?>
+									<?php $isEu = (int)($colegaTurma['IdAluno'] ?? 0) === (int)$alunoIdSessao; ?>
+									<tr>
+										<td><?php echo e($colegaTurma['IdAluno']); ?></td>
+										<td><?php echo e($colegaTurma['Nome']); ?></td>
+										<td><?php echo $isEu ? 'Tu' : '-'; ?></td>
+									</tr>
+								<?php endforeach; ?>
+							</table>
+						</div>
+					<?php else: ?>
+						<p>Ainda não existem alunos matriculados nesta turma.</p>
 					<?php endif; ?>
 				</div>
 			<?php else: ?>
