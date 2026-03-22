@@ -98,6 +98,10 @@ $message = trim((string)($_GET['message'] ?? ''));
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $postAction = $_POST['post_action'] ?? '';
 
+  if (!csrfTokenIsValid($_POST['csrf_token'] ?? '')) {
+    redirectWithMessage($section, 'error', 'Sessão expirada. Atualiza a página e tenta novamente.');
+  }
+
   if ($postAction === 'decidir_pedido') {
     $idPedido = (int)($_POST['IdPedido'] ?? 0);
     $decisao = (string)($_POST['decisao'] ?? '');
@@ -479,8 +483,8 @@ if ($section === 'pautas' && $pautaDisciplinaId > 0) {
   $stmtPauta->close();
 }
 
-$stylesVersion = (string)(@filemtime(__DIR__ . '/styles.css') ?: time());
-$stylesHref = 'styles.css?v=' . rawurlencode($stylesVersion);
+$stylesVersion = (string)(@filemtime(dirname(__DIR__) . '/estilos/styles.css') ?: time());
+$stylesHref = '../estilos/styles.css?v=' . rawurlencode($stylesVersion);
 $printMode = $section === 'pautas' && (($_GET['print'] ?? '') === '1');
 ?>
 <!DOCTYPE html>
@@ -767,6 +771,7 @@ $printMode = $section === 'pautas' && (($_GET['print'] ?? '') === '1');
             <td>
               <?php if ($estadoAtual === 'Pendente'): ?>
                 <form method="post" class="decision-form decision-form-pedido">
+                  <?php echo csrfInput(); ?>
                   <input type="hidden" name="post_action" value="decidir_pedido">
                   <input type="hidden" name="IdPedido" value="<?php echo e($rowPedido['IdPedido']); ?>">
                   <input class="decision-observation" type="text" name="observacao_decisao" maxlength="255" placeholder="Observação do funcionário (opcional)">
@@ -860,6 +865,7 @@ $printMode = $section === 'pautas' && (($_GET['print'] ?? '') === '1');
       <div class="form-box">
         <h3><?php echo $notaEdit ? 'Editar nota' : 'Registar nova nota'; ?></h3>
         <form method="post">
+                  <?php echo csrfInput(); ?>
           <input type="hidden" name="post_action" value="guardar_nota">
           <input type="hidden" name="IdNota" value="<?php echo e($notaEdit['IdNota'] ?? 0); ?>">
 
@@ -966,6 +972,7 @@ $printMode = $section === 'pautas' && (($_GET['print'] ?? '') === '1');
             <td class="actions notas-actions">
               <a class="table-action-btn edit-action-btn" href="?section=notas&action=edit&id_nota=<?php echo e($rowNota['IdNota']); ?>">Editar</a>
               <form class="inline" method="post" onsubmit="return confirm('Eliminar esta nota?');">
+                  <?php echo csrfInput(); ?>
                 <input type="hidden" name="post_action" value="eliminar_nota">
                 <input type="hidden" name="IdNota" value="<?php echo e($rowNota['IdNota']); ?>">
                 <button class="table-action-btn danger-button" type="submit">Excluir</button>

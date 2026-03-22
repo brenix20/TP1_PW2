@@ -176,6 +176,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 		redirectWithMessage('disciplina', 'error', 'Tabela inválida.');
 	}
 
+	if (!csrfTokenIsValid($_POST['csrf_token'] ?? '')) {
+		redirectWithMessage($postTable, 'error', 'Sessão expirada. Atualiza a página e tenta novamente.');
+	}
+
 	$alunoPodeAtualizarFicha = $isAluno && $postTable === 'matriculas' && $postAction === 'update_self';
 	$alunoPodeCriarFicha = $isAluno && $postTable === 'matriculas' && $postAction === 'create_self';
 	$alunoAExecutarPedido = $isAluno && $postTable === 'pedidos' && $postAction === 'create_self';
@@ -413,8 +417,8 @@ $message = $_GET['message'] ?? '';
 $type = $_GET['type'] ?? '';
 $matriculasFiltroTexto = trim((string)($_GET['q'] ?? ''));
 $matriculasFiltroCurso = (int)($_GET['curso'] ?? 0);
-$stylesVersion = (string)(@filemtime(__DIR__ . '/styles.css') ?: time());
-$stylesHref = 'styles.css?v=' . rawurlencode($stylesVersion);
+$stylesVersion = (string)(@filemtime(dirname(__DIR__) . '/estilos/styles.css') ?: time());
+$stylesHref = '../estilos/styles.css?v=' . rawurlencode($stylesVersion);
 
 $editData = null;
 $alunoDisciplinas = [];
@@ -803,6 +807,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
 					<?php endif; ?>
 				<?php endif; ?>
 				<form method="post">
+                  <?php echo csrfInput(); ?>
 					<input type="hidden" name="table" value="pedidos">
 					<input type="hidden" name="action" value="create_self">
 
@@ -912,6 +917,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
 					<h3>Submeter ficha de aluno</h3>
 					<p>Preenche os teus dados pessoais e de contacto para criares a tua ficha.</p>
 					<form method="post" enctype="multipart/form-data">
+                  <?php echo csrfInput(); ?>
 						<input type="hidden" name="table" value="matriculas">
 						<input type="hidden" name="action" value="create_self">
 
@@ -1025,6 +1031,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
 				<div class="form-box">
 					<h3><?php echo e($fichaAluno['Nome']); ?></h3>
 					<form method="post" enctype="multipart/form-data">
+                  <?php echo csrfInput(); ?>
 						<input type="hidden" name="table" value="matriculas">
 						<input type="hidden" name="action" value="update_self">
 

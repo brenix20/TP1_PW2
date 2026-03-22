@@ -116,6 +116,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirectWithMessage('disciplina', 'error', 'Tabela inválida.');
   }
 
+  if (!csrfTokenIsValid($_POST['csrf_token'] ?? '')) {
+    redirectWithMessage($postTable, 'error', 'Sessão expirada. Atualiza a página e tenta novamente.');
+  }
+
   $alunoPodeAtualizarFicha = $isAluno && $postTable === 'matriculas' && $postAction === 'update_self';
   $alunoPodeCriarFicha = $isAluno && $postTable === 'matriculas' && $postAction === 'create_self';
   if (!$podeEditarDisciplinasCursos && !$alunoPodeAtualizarFicha && !$alunoPodeCriarFicha) {
@@ -479,7 +483,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $newIdCurso = (int)($_POST['IdCurso'] ?? 0);
       $stmt = $conn->prepare("UPDATE plano_estudos SET IdDisciplina = ?, IdCurso = ? WHERE IdDisciplina = ? AND IdCurso = ?");
       $stmt->bind_param('iiii', $newIdDisciplina, $newIdCurso, $oldIdDisciplina, $oldIdCurso);
-      $ok = $stmt->execute();
+      $ok = $stmt->execute();faz
       $stmt->close();
       redirectWithMessage('plano_estudos', $ok ? 'success' : 'error', $ok ? 'Ligação atualizada com sucesso.' : 'Erro ao atualizar ligação.');
     }
@@ -500,8 +504,8 @@ $message = $_GET['message'] ?? '';
 $type = $_GET['type'] ?? '';
 $matriculasFiltroTexto = trim((string)($_GET['q'] ?? ''));
 $matriculasFiltroCurso = (int)($_GET['curso'] ?? 0);
-$stylesVersion = (string)(@filemtime(__DIR__ . '/styles.css') ?: time());
-$stylesHref = 'styles.css?v=' . rawurlencode($stylesVersion);
+$stylesVersion = (string)(@filemtime(dirname(__DIR__) . '/estilos/styles.css') ?: time());
+$stylesHref = '../estilos/styles.css?v=' . rawurlencode($stylesVersion);
 
 $editData = null;
 $alunoDisciplinas = [];
@@ -807,6 +811,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
               <td class="actions">
                 <a href="?table=disciplina&action=edit&id=<?php echo e($row['IdDisciplina']); ?>">Editar</a>
                 <form class="inline" method="post" onsubmit="return confirm('Remover disciplina?');">
+                  <?php echo csrfInput(); ?>
                   <input type="hidden" name="table" value="disciplina">
                   <input type="hidden" name="action" value="delete">
                   <input type="hidden" name="IdDisciplina" value="<?php echo e($row['IdDisciplina']); ?>">
@@ -823,6 +828,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
       <div class="form-box">
         <h3><?php echo $editData ? 'Editar Disciplina' : 'Nova Disciplina'; ?></h3>
         <form method="post">
+                  <?php echo csrfInput(); ?>
           <input type="hidden" name="table" value="disciplina">
           <input type="hidden" name="action" value="<?php echo $editData ? 'update' : 'create'; ?>">
           <?php if ($editData): ?>
@@ -864,6 +870,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
               <td class="actions">
                 <a href="?table=cursos&action=edit&id=<?php echo e($row['IdCurso']); ?>">Editar</a>
                 <form class="inline" method="post" onsubmit="return confirm('Remover curso?');">
+                  <?php echo csrfInput(); ?>
                   <input type="hidden" name="table" value="cursos">
                   <input type="hidden" name="action" value="delete">
                   <input type="hidden" name="IdCurso" value="<?php echo e($row['IdCurso']); ?>">
@@ -880,6 +887,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
       <div class="form-box">
         <h3><?php echo $editData ? 'Editar Curso' : 'Novo Curso'; ?></h3>
         <form method="post">
+                  <?php echo csrfInput(); ?>
           <input type="hidden" name="table" value="cursos">
           <input type="hidden" name="action" value="<?php echo $editData ? 'update' : 'create'; ?>">
           <?php if ($editData): ?>
@@ -961,6 +969,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
           <h3>Submeter ficha de aluno</h3>
           <p>Preenche os teus dados pessoais e de contacto para criares a tua ficha.</p>
           <form method="post" enctype="multipart/form-data">
+                  <?php echo csrfInput(); ?>
             <input type="hidden" name="table" value="matriculas">
             <input type="hidden" name="action" value="create_self">
 
@@ -1031,6 +1040,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
         <div class="form-box">
           <h3><?php echo e($fichaAluno['Nome']); ?></h3>
           <form method="post" enctype="multipart/form-data">
+                  <?php echo csrfInput(); ?>
             <input type="hidden" name="table" value="matriculas">
             <input type="hidden" name="action" value="update_self">
 
@@ -1125,6 +1135,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
               <a href="?table=matriculas&action=certificado_print&id_aluno=<?php echo e($row['IdAluno']); ?>" target="_blank" rel="noopener">Certificado</a>
               <a href="?table=matriculas&action=ver_disciplinas&id_aluno=<?php echo e($row['IdAluno']); ?>">Ver disciplinas</a>
               <form class="inline inline-approve" method="post">
+                  <?php echo csrfInput(); ?>
                 <input type="hidden" name="table" value="matriculas">
                 <input type="hidden" name="action" value="set_validation">
                 <input type="hidden" name="IdAluno" value="<?php echo e($row['IdAluno']); ?>">
@@ -1132,6 +1143,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
                 <button type="submit">Aprovar</button>
               </form>
               <form class="inline" method="post" onsubmit="return confirm('Rejeitar esta ficha?');">
+                  <?php echo csrfInput(); ?>
                 <input type="hidden" name="table" value="matriculas">
                 <input type="hidden" name="action" value="set_validation">
                 <input type="hidden" name="IdAluno" value="<?php echo e($row['IdAluno']); ?>">
@@ -1139,6 +1151,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
                 <button type="submit">Rejeitar</button>
               </form>
               <form class="inline" method="post" onsubmit="return confirm('Remover matrícula?');">
+                  <?php echo csrfInput(); ?>
                 <input type="hidden" name="table" value="matriculas">
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="IdAluno" value="<?php echo e($row['IdAluno']); ?>">
@@ -1157,6 +1170,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
       <div class="form-box">
         <h3><?php echo $editData ? 'Editar Matrícula' : 'Nova Matrícula'; ?></h3>
         <form method="post" enctype="multipart/form-data">
+                  <?php echo csrfInput(); ?>
           <input type="hidden" name="table" value="matriculas">
           <input type="hidden" name="action" value="<?php echo $editData ? 'update' : 'create'; ?>">
 
@@ -1233,6 +1247,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
           <td class="actions">
             <a href="?table=plano_estudos&action=edit&id_disciplina=<?php echo e($row['IdDisciplina']); ?>&id_curso=<?php echo e($row['IdCurso']); ?>">Editar</a>
             <form class="inline" method="post" onsubmit="return confirm('Remover ligação do plano?');">
+                  <?php echo csrfInput(); ?>
               <input type="hidden" name="table" value="plano_estudos">
               <input type="hidden" name="action" value="delete">
               <input type="hidden" name="IdDisciplina" value="<?php echo e($row['IdDisciplina']); ?>">
@@ -1247,6 +1262,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
     <div class="form-box">
       <h3><?php echo $editData ? 'Editar Ligação' : 'Nova Ligação'; ?></h3>
       <form method="post">
+                  <?php echo csrfInput(); ?>
         <input type="hidden" name="table" value="plano_estudos">
         <input type="hidden" name="action" value="<?php echo $editData ? 'update' : 'create'; ?>">
         <?php if ($editData): ?>

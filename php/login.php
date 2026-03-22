@@ -3,12 +3,16 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 	session_start();
 }
 
-$servername = 'localhost';
-$username = 'root';
-$password = '';
-$dbname = 'ipcavnf';
+require_once __DIR__ . '/bootstrap.php';
 
-$conn = new mysqli($servername, $username, $password, $dbname);
+$dbConfig = getDbConfig();
+$conn = new mysqli(
+	(string)$dbConfig['host'],
+	(string)$dbConfig['user'],
+	(string)$dbConfig['pass'],
+	(string)$dbConfig['name'],
+	(int)$dbConfig['port']
+);
 $baseDadosDisponivel = !$conn->connect_error;
 if ($baseDadosDisponivel) {
 	$conn->set_charset('utf8mb4');
@@ -30,6 +34,76 @@ $tipo = 'error';
 $loginInput = '';
 $novoUtilizadorInput = '';
 $perfilSelecionado = 0;
+$utilizadorEsqueceuInput = '';
+$mostrarEsqueceu = false;
+
+function getPasswordHashConfig()
+{
+	if (defined('PASSWORD_ARGON2ID')) {
+		return [
+			'algo' => PASSWORD_ARGON2ID,
+			'options' => [
+				'memory_cost' => 131072,
+				'time_cost' => 4,
+				'threads' => 2,
+			],
+		];
+	}
+
+	return [
+		'algo' => PASSWORD_BCRYPT,
+		'options' => [
+			'cost' => 12,
+		],
+	];
+}
+
+function hashPasswordSecure($password)
+{
+	$config = getPasswordHashConfig();
+	return password_hash((string)$password, $config['algo'], $config['options']);
+}
+
+function passwordNeedsRehashSecure($hash)
+{
+	$config = getPasswordHashConfig();
+	return password_needs_rehash((string)$hash, $config['algo'], $config['options']);
+}
+
+function validarPasswordForte($password, $username, &$errorMessage)
+{
+	$pwd = (string)$password;
+	$user = trim((string)$username);
+	$len = function_exists('mb_strlen') ? mb_strlen($pwd) : strlen($pwd);
+
+	if ($len < 12) {
+		$errorMessage = 'A Password deve ter pelo menos 12 caracteres.';
+		return false;
+	}
+
+	if ($len > 128) {
+		$errorMessage = 'A Password não pode ter mais de 128 caracteres.';
+		return false;
+	}
+
+	if (!preg_match('/[A-Z]/', $pwd) || !preg_match('/[a-z]/', $pwd) || !preg_match('/\d/', $pwd) || !preg_match('/[^A-Za-z0-9]/', $pwd)) {
+		$errorMessage = 'A Password deve incluir maiúsculas, minúsculas, números e símbolos.';
+		return false;
+	}
+
+	if ($user !== '' && stripos($pwd, $user) !== false) {
+		$errorMessage = 'A Password não pode conter o nome de utilizador.';
+		return false;
+	}
+
+	$comuns = ['123456', '123456789', 'qwerty', 'password', 'admin', 'abc123', '123123'];
+	if (in_array(strtolower($pwd), $comuns, true)) {
+		$errorMessage = 'A Password é demasiado comum.';
+		return false;
+	}
+
+	return true;
+}
 
 if (isset($_GET['message']) && is_string($_GET['message'])) {
 	$mensagem = $_GET['message'];
@@ -40,12 +114,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 	$tipo = 'error';
 	$acaoFormulario = $_POST['form_action'] ?? 'login';
 
-	if (!$baseDadosDisponivel) {
+	if (!csrfTokenIsValid($_POST['csrf_token'] ?? '')) {
+		$mensagem = 'Sessão expirada. Atualiza a página e tenta novamente.';
+	} elseif (!$baseDadosDisponivel) {
 		$mensagem = 'Não foi possível ligar à base de dados.';
+	} elseif ($acaoFormulario === 'forgot_password') {
+		$mostrarEsqueceu = true;
+		$utilizadorEsqueceu = trim((string)($_POST['utilizador_esqueceu'] ?? ''));
+		$novaSenhaEsqueceu = (string)($_POST['nova_senha_esqueceu'] ?? '');
+		$confirmarSenhaEsqueceu = (string)($_POST['confirmar_senha_esqueceu'] ?? '');
+		$utilizadorEsqueceuInput = $utilizadorEsqueceu;
+
+		if ($utilizadorEsqueceu === '' || $novaSenhaEsqueceu === '' || $confirmarSenhaEsqueceu === '') {
+			$mensagem = 'Preenche utilizador, nova palavra passe e confirmação.';
+		} elseif ($novaSenhaEsqueceu !== $confirmarSenhaEsqueceu) {
+			$mensagem = 'As Passwords não coincidem.';
+		} elseif (!validarPasswordForte($novaSenhaEsqueceu, $utilizadorEsqueceu, $mensagem)) {
+			// $mensagem is set inside password validator
+		} else {
+			$stmtExiste = $conn->prepare('SELECT IdUser FROM Users WHERE login = ? LIMIT 1');
+			$stmtExiste->bind_param('s', $utilizadorEsqueceu);
+			$stmtExiste->execute();
+			$resultExiste = $stmtExiste->get_result();
+			$linhaExiste = $resultExiste ? $resultExiste->fetch_assoc() : null;
+			$stmtExiste->close();
+
+			if (!$linhaExiste) {
+				$mensagem = 'Utilizador não encontrado.';
+			} else {
+				$novoHash = hashPasswordSecure($novaSenhaEsqueceu);
+				if (!is_string($novoHash) || $novoHash === '') {
+					$mensagem = 'Não foi possível processar a Password com segurança.';
+				} else {
+					$idUser = (int)$linhaExiste['IdUser'];
+					$stmtUpdate = $conn->prepare('UPDATE Users SET password = ? WHERE IdUser = ?');
+					$stmtUpdate->bind_param('si', $novoHash, $idUser);
+					$okUpdate = $stmtUpdate->execute();
+					$stmtUpdate->close();
+
+					if ($okUpdate) {
+						$mensagem = 'Palavra passe atualizada com sucesso. Já podes entrar.';
+						$tipo = 'success';
+						$loginInput = $utilizadorEsqueceu;
+						$utilizadorEsqueceuInput = '';
+					} else {
+						$mensagem = 'Erro ao atualizar palavra passe.';
+					}
+				}
+			}
+		}
 	} elseif ($acaoFormulario === 'register') {
 		$novoUtilizador = trim($_POST['novo_utilizador'] ?? '');
-		$novaSenha = trim($_POST['nova_senha'] ?? '');
-		$confirmarSenha = trim($_POST['confirmar_senha'] ?? '');
+		$novaSenha = (string)($_POST['nova_senha'] ?? '');
+		$confirmarSenha = (string)($_POST['confirmar_senha'] ?? '');
 		$perfilSelecionado = (int)($_POST['perfil'] ?? 0);
 		$novoUtilizadorInput = $novoUtilizador;
 
@@ -55,6 +176,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 			$mensagem = 'O utilizador não pode ter mais de 40 caracteres.';
 		} elseif ($novaSenha !== $confirmarSenha) {
 			$mensagem = 'As Passwords não coincidem.';
+		} elseif (!validarPasswordForte($novaSenha, $novoUtilizador, $mensagem)) {
+			// $mensagem is set inside password validator
 		} elseif (empty($perfis)) {
 			$mensagem = 'Não existem perfis disponíveis para criar conta.';
 		} else {
@@ -79,7 +202,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 				if ($jaExiste) {
 					$mensagem = 'Esse utilizador já existe.';
 				} else {
-					$senhaHash = password_hash($novaSenha, PASSWORD_DEFAULT);
+					$senhaHash = hashPasswordSecure($novaSenha);
+					if (!is_string($senhaHash) || $senhaHash === '') {
+						$mensagem = 'Não foi possível processar a Password com segurança.';
+					} else {
 					$stmtCriar = $conn->prepare('INSERT INTO Users (login, password, perfil) VALUES (?, ?, ?)');
 					$stmtCriar->bind_param('ssi', $novoUtilizador, $senhaHash, $perfilSelecionado);
 					$okCriar = $stmtCriar->execute();
@@ -93,6 +219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 						$perfilSelecionado = 0;
 					} else {
 						$mensagem = 'Erro ao criar conta.';
+					}
 					}
 				}
 			}
@@ -131,8 +258,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 				}
 
 				if ($autenticado) {
-					if (!$senhaGuardadaEhHash || password_needs_rehash($senhaGuardada, PASSWORD_DEFAULT)) {
-						$novoHash = password_hash($senha, PASSWORD_DEFAULT);
+					if (!$senhaGuardadaEhHash || passwordNeedsRehashSecure($senhaGuardada)) {
+						$novoHash = hashPasswordSecure($senha);
 						$stmtAtualizaHash = $conn->prepare('UPDATE Users SET password = ? WHERE IdUser = ?');
 						$stmtAtualizaHash->bind_param('si', $novoHash, $linha['IdUser']);
 						$stmtAtualizaHash->execute();
@@ -240,8 +367,8 @@ $qrProviders = [
 $urlQrImagem = $qrProviders[0] . urlencode($urlAcessoMovel);
 $qrProvidersJson = json_encode($qrProviders, JSON_UNESCAPED_SLASHES);
 $qrProvidersJson = is_string($qrProvidersJson) ? $qrProvidersJson : '[]';
-$stylesVersion = (string)(@filemtime(__DIR__ . '/styles.css') ?: time());
-$stylesHref = 'styles.css?v=' . rawurlencode($stylesVersion);
+$stylesVersion = (string)(@filemtime(dirname(__DIR__) . '/estilos/styles.css') ?: time());
+$stylesHref = '../estilos/styles.css?v=' . rawurlencode($stylesVersion);
 
 if ($baseDadosDisponivel) {
 	$conn->close();
@@ -265,6 +392,7 @@ if ($baseDadosDisponivel) {
 		<?php endif; ?>
 
 		<form method="post">
+			<?php echo csrfInput(); ?>
 			<input type="hidden" name="form_action" value="login">
 			<h2 class="auth-title">Entrar</h2>
 			<label for="utilizador">Utilizador</label>
@@ -276,9 +404,34 @@ if ($baseDadosDisponivel) {
 			<button type="submit">Entrar</button>
 		</form>
 
+		<button id="toggle_esqueceu" class="secondary-button" type="button" aria-controls="bloco_esqueceu_password" aria-expanded="<?php echo $mostrarEsqueceu ? 'true' : 'false'; ?>">Esqueceu-se da palavra passe?</button>
+
+		<div id="bloco_esqueceu_password" <?php echo $mostrarEsqueceu ? '' : 'hidden'; ?>>
+			<div class="auth-divider"><span>recuperar</span></div>
+
+			<form method="post" id="esqueceu_password">
+				<?php echo csrfInput(); ?>
+				<input type="hidden" name="form_action" value="forgot_password">
+				<h2 class="auth-title">Nova palavra passe</h2>
+
+				<label for="utilizador_esqueceu">Utilizador</label>
+				<input id="utilizador_esqueceu" name="utilizador_esqueceu" type="text" required value="<?php echo e($utilizadorEsqueceuInput); ?>">
+
+				<label for="nova_senha_esqueceu">Nova palavra passe</label>
+				<input id="nova_senha_esqueceu" name="nova_senha_esqueceu" type="password" minlength="12" maxlength="128" autocomplete="new-password" required>
+
+				<label for="confirmar_senha_esqueceu">Confirmar nova palavra passe</label>
+				<input id="confirmar_senha_esqueceu" name="confirmar_senha_esqueceu" type="password" minlength="12" maxlength="128" autocomplete="new-password" required>
+				<p class="subtitle">Mínimo 12 caracteres com maiúsculas, minúsculas, números e símbolos.</p>
+
+				<button type="submit" class="secondary-button">Atualizar palavra passe</button>
+			</form>
+		</div>
+
 		<div class="auth-divider"><span>ou</span></div>
 
 		<form method="post">
+			<?php echo csrfInput(); ?>
 			<input type="hidden" name="form_action" value="register">
 			<h2 class="auth-title">Criar conta</h2>
 
@@ -286,10 +439,11 @@ if ($baseDadosDisponivel) {
 			<input id="novo_utilizador" name="novo_utilizador" type="text" maxlength="40" required value="<?php echo e($novoUtilizadorInput); ?>">
 
 			<label for="nova_senha">Password</label>
-			<input id="nova_senha" name="nova_senha" type="password" required>
+			<input id="nova_senha" name="nova_senha" type="password" minlength="12" maxlength="128" autocomplete="new-password" required>
 
 			<label for="confirmar_senha">Confirmar Password</label>
-			<input id="confirmar_senha" name="confirmar_senha" type="password" required>
+			<input id="confirmar_senha" name="confirmar_senha" type="password" minlength="12" maxlength="128" autocomplete="new-password" required>
+			<p class="subtitle">Mínimo 12 caracteres com maiúsculas, minúsculas, números e símbolos.</p>
 
 			<label for="perfil">Tipo de perfil</label>
 			<select id="perfil" name="perfil" required>
@@ -320,6 +474,23 @@ if ($baseDadosDisponivel) {
 			</div>
 		</div>
 	</div>
+
+	<script>
+		(function () {
+			var botaoEsqueceu = document.getElementById('toggle_esqueceu');
+			var blocoEsqueceu = document.getElementById('bloco_esqueceu_password');
+
+			if (!botaoEsqueceu || !blocoEsqueceu) {
+				return;
+			}
+
+			botaoEsqueceu.addEventListener('click', function () {
+				var estaVisivel = !blocoEsqueceu.hidden;
+				blocoEsqueceu.hidden = estaVisivel;
+				botaoEsqueceu.setAttribute('aria-expanded', estaVisivel ? 'false' : 'true');
+			});
+		})();
+	</script>
 
 	<script>
 		(function () {

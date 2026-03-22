@@ -93,6 +93,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirectWithMessage('disciplina', 'error', 'Tabela inválida.');
   }
 
+  if (!csrfTokenIsValid($_POST['csrf_token'] ?? '')) {
+    redirectWithMessage($postTable, 'error', 'Sessão expirada. Atualiza a página e tenta novamente.');
+  }
+
   // Permission checks: gestores só podem gerir disciplinas/cursos/planos; validação de fichas é feita via set_validation
   if (in_array($postTable, ['disciplina', 'cursos', 'plano_estudos'], true)) {
     if (!$podeEditarDisciplinasCursos) {
@@ -425,8 +429,8 @@ $message = $_GET['message'] ?? '';
 $type = $_GET['type'] ?? '';
 $matriculasFiltroTexto = trim((string)($_GET['q'] ?? ''));
 $matriculasFiltroCurso = (int)($_GET['curso'] ?? 0);
-$stylesVersion = (string)(@filemtime(__DIR__ . '/styles.css') ?: time());
-$stylesHref = 'styles.css?v=' . rawurlencode($stylesVersion);
+$stylesVersion = (string)(@filemtime(dirname(__DIR__) . '/estilos/styles.css') ?: time());
+$stylesHref = '../estilos/styles.css?v=' . rawurlencode($stylesVersion);
 
 $editData = null;
 $alunoDisciplinas = [];
@@ -722,6 +726,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
               <td class="actions">
                 <a class="table-action-btn edit-action-btn" href="?table=disciplina&action=edit&id=<?php echo e($row['IdDisciplina']); ?>">Editar</a>
                 <form class="inline" method="post" onsubmit="return confirm('Remover disciplina?');">
+                  <?php echo csrfInput(); ?>
                   <input type="hidden" name="table" value="disciplina">
                   <input type="hidden" name="action" value="delete">
                   <input type="hidden" name="IdDisciplina" value="<?php echo e($row['IdDisciplina']); ?>">
@@ -738,6 +743,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
       <div class="form-box">
         <h3><?php echo $editData ? 'Editar Disciplina' : 'Nova Disciplina'; ?></h3>
         <form method="post">
+                  <?php echo csrfInput(); ?>
           <input type="hidden" name="table" value="disciplina">
           <input type="hidden" name="action" value="<?php echo $editData ? 'update' : 'create'; ?>">
           <?php if ($editData): ?>
@@ -779,6 +785,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
               <td class="actions">
                 <a class="table-action-btn edit-action-btn" href="?table=cursos&action=edit&id=<?php echo e($row['IdCurso']); ?>">Editar</a>
                 <form class="inline" method="post" onsubmit="return confirm('Remover curso?');">
+                  <?php echo csrfInput(); ?>
                   <input type="hidden" name="table" value="cursos">
                   <input type="hidden" name="action" value="delete">
                   <input type="hidden" name="IdCurso" value="<?php echo e($row['IdCurso']); ?>">
@@ -795,6 +802,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
       <div class="form-box">
         <h3><?php echo $editData ? 'Editar Curso' : 'Novo Curso'; ?></h3>
         <form method="post">
+                  <?php echo csrfInput(); ?>
           <input type="hidden" name="table" value="cursos">
           <input type="hidden" name="action" value="<?php echo $editData ? 'update' : 'create'; ?>">
           <?php if ($editData): ?>
@@ -941,6 +949,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
                 <?php endif; ?>
               <?php else: ?>
                 <form class="validation-actions" method="post">
+                  <?php echo csrfInput(); ?>
                   <input type="hidden" name="table" value="matriculas">
                   <input type="hidden" name="action" value="set_validation">
                   <input type="hidden" name="IdAluno" value="<?php echo e($row['IdAluno']); ?>">
@@ -979,6 +988,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
           <div class="form-box">
             <h3>Validar Ficha - <?php echo e($editData['Nome']); ?></h3>
             <form method="post">
+                  <?php echo csrfInput(); ?>
               <input type="hidden" name="table" value="matriculas">
               <input type="hidden" name="action" value="set_validation">
               <input type="hidden" name="IdAluno" value="<?php echo e($editData['IdAluno']); ?>">
@@ -1005,6 +1015,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
           <div class="form-box">
             <h3>Editar Matrícula</h3>
             <form method="post" enctype="multipart/form-data">
+                  <?php echo csrfInput(); ?>
               <input type="hidden" name="table" value="matriculas">
               <input type="hidden" name="action" value="update">
               <input type="hidden" name="IdAluno" value="<?php echo e($editData['IdAluno']); ?>">
@@ -1055,6 +1066,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
           <div class="form-box">
             <h3>Nova Matrícula</h3>
             <form method="post" enctype="multipart/form-data">
+                  <?php echo csrfInput(); ?>
               <input type="hidden" name="table" value="matriculas">
               <input type="hidden" name="action" value="create">
 
@@ -1132,6 +1144,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
               <td class="actions">
                 <a class="action-button table-action-btn" href="?table=plano_estudos&action=edit&id_disciplina=<?php echo e($row['IdDisciplina']); ?>&id_curso=<?php echo e($row['IdCurso']); ?>&id_ano=<?php echo e($row['Ano']); ?>&id_semestre=<?php echo e($row['Semestre']); ?>">Editar</a>
                 <form class="inline" method="post" onsubmit="return confirm('Remover ligação do plano?');">
+                  <?php echo csrfInput(); ?>
                   <input type="hidden" name="table" value="plano_estudos">
                   <input type="hidden" name="action" value="delete">
                   <input type="hidden" name="IdDisciplina" value="<?php echo e($row['IdDisciplina']); ?>">
@@ -1149,6 +1162,7 @@ if ($table === 'matriculas' && $action === 'certificado_print') {
     <div class="form-box">
       <h3><?php echo $editData ? 'Editar Ligação' : 'Nova Ligação'; ?></h3>
       <form method="post">
+                  <?php echo csrfInput(); ?>
         <input type="hidden" name="table" value="plano_estudos">
         <input type="hidden" name="action" value="<?php echo $editData ? 'update' : 'create'; ?>">
         <?php if ($editData): ?>

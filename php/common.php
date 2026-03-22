@@ -3,17 +3,21 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
   session_start();
 }
 
+require_once __DIR__ . '/bootstrap.php';
+
 if (empty($_SESSION['utilizador_autenticado'])) {
   header('Location: login.php');
   exit;
 }
 
-$servername = "localhost";
-$username = "root";
-$password = "";
-$dbname = "ipcavnf";
-
-$conn = new mysqli($servername, $username, $password, $dbname);
+$dbConfig = getDbConfig();
+$conn = new mysqli(
+  (string)$dbConfig['host'],
+  (string)$dbConfig['user'],
+  (string)$dbConfig['pass'],
+  (string)$dbConfig['name'],
+  (int)$dbConfig['port']
+);
 if ($conn->connect_error) {
   die("Connection failed: " . $conn->connect_error);
 }
@@ -512,6 +516,8 @@ if (!function_exists('getCertificadoLogoPath')) {
     $dirs = [
       ['abs' => __DIR__, 'rel' => ''],
       ['abs' => dirname(__DIR__), 'rel' => '../'],
+      ['abs' => dirname(__DIR__) . '/imagens', 'rel' => '../imagens/'],
+      ['abs' => dirname(__DIR__) . '/img', 'rel' => '../img/'],
     ];
     $extPermitidas = ['png', 'jpg', 'jpeg', 'webp', 'svg'];
     $preferidos = [];
